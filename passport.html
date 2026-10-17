@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>All about me · Our Compass</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<style>
+  /* Shows an "All about me" passport from a QR code. The passport is inside the link after "#", which browsers never send to the website. */
+  :root{--bg:#f3f3f0;--card:#fffefb;--ink:#22313a;--soft:#5b6a72;--line:#e0e0da;--brand:#2f5968}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:640px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+  h1{font-size:1.5em;margin:0 0 6px}
+  h2{font-size:1.05em;margin:18px 0 4px;color:var(--brand)}
+  p{margin:4px 0;white-space:pre-wrap}
+  ul,ol{margin:4px 0;padding-left:22px}
+  .muted{color:var(--soft);font-size:.9em}
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .top img{width:40px;height:40px;border-radius:10px}
+  button{font:inherit;border:0;border-radius:12px;padding:12px 16px;background:var(--brand);color:#fff;min-height:48px;cursor:pointer}
+  @media print{body{background:#fff}.noprint{display:none}.card{border:0;padding:0}}
+</style>
+</head>
+<body>
+<main>
+  <div class="top noprint"><img src="icon-192.png" alt=""><b>Our Compass</b></div>
+  <div class="card" id="out"><p class="muted">Opening…</p></div>
+  <p class="muted noprint" style="margin-top:12px">Shared from a family's phone with Our Compass. This passport isn't stored on any website: it's packed inside the QR code.</p>
+  <p class="noprint"><button onclick="window.print()">🖨️ Print</button></p>
+</main>
+<script>
+(async function(){
+  'use strict';
+  const out=document.getElementById('out');
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const SENSES={noise:['👂','Noise'],light:['💡','Light'],touch:['✋','Touch'],smells:['👃','Smells'],clothes:['👕','Clothes and labels'],tastes:['👅','Food tastes and textures']};
+  const LEVELS={very:'Very sensitive',bit:'A bit sensitive',ok:'No problem',seeks:'Loves lots of it'};
+  function bytes(b64){const s=atob(b64.replace(/-/g,'+').replace(/_/g,'/'));const a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a;}
+  try{
+    const h=decodeURIComponent(location.hash.slice(1)); if(!h)throw new Error('none');
+    let json;
+    if(h[0]==='z'){
+      if(!window.DecompressionStream)throw new Error('old');
+      json=await new Response(new Blob([bytes(h.slice(1))]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+    }else json=new TextDecoder().decode(bytes(h.slice(1)));
+    const d=JSON.parse(json);
+    document.title='All about '+d.n+' · Our Compass';
+    let x='<h1>'+esc(d.e)+' All about '+esc(d.n)+'</h1>';
+    [['l','Things I love'],['h','What helps me'],['u','What I find hard or upsetting'],['o','How you can tell it\'s getting too much'],['c','How I communicate, and how to talk to me']]
+      .forEach(([k,l])=>{if(d[k]&&String(d[k]).trim())x+='<h2>'+esc(l)+'</h2><p>'+esc(d[k])+'</p>';});
+    if(d.s&&d.s.length)x+='<h2>My senses</h2><ul>'+d.s.map(([id,lv,note])=>'<li>'+esc((SENSES[id]||['',id]).join(' '))+': '+esc([LEVELS[lv],note].filter(Boolean).join('. '))+'</li>').join('')+'</ul>';
+    if(d.p&&d.p.length)x+='<h2>When it gets too much</h2><ol>'+d.p.map(s=>'<li>'+esc(s)+'</li>').join('')+'</ol>';
+    out.innerHTML=x;
+  }catch(e){
+    out.innerHTML=e.message==='old'?'<p>This browser is too old to open the passport. Try Chrome or Safari, or ask the family to send it as text.</p>'
+      :'<p>This link doesn\'t contain a passport. Ask the family to share it again from Our Compass.</p>';
+  }
+})();
+</script>
+</body>
+</html>

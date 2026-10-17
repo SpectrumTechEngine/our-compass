@@ -1,0 +1,10 @@
+{
+  "appId": "com.thespectrumtechengine.ourcompass",
+  "appName": "Our Compass",
+  "webDir": "www",
+  "backgroundColor": "#0f0c29",
+  "server": {
+    "url": "https://thespectrumtechengine.com/our-compass/",
+    "errorPath": "index.html"
+  }
+}
