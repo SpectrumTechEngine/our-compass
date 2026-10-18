@@ -20,6 +20,8 @@
   body.th-animals{--bg:#fbf4ec;--brand:#a4572a;--brand2:#cf8350;--tint:#f5e4d3;--line:#ecdccb}
   body.th-space{--bg:#eef0fa;--brand:#3b3f8f;--brand2:#6a5fc1;--tint:#e0e2f6;--line:#d9dcef}
   body.th-nature{--bg:#eff5ec;--brand:#2f6b4a;--brand2:#4c9a6a;--tint:#dcecd9;--line:#d6e4d2}
+  body.th-pinkpurple{--bg:#fbf1fa;--brand:#86398b;--brand2:#c25fb4;--tint:#f3dff1;--line:#ecd6ea}
+  body.th-ocean{--bg:#eef4f8;--brand:#1f4e6e;--brand2:#3f7fa6;--tint:#dbe8f1;--line:#d3e0ea}
   body.big{--fs:20px}
   body.age-little{--r:22px}
   body.grown{--r:10px}
@@ -150,6 +152,15 @@
   nav button{flex:1;background:none;color:var(--soft);border-radius:0;padding:8px 2px;font-size:12px;min-height:62px;flex-direction:column;gap:0}
   nav button b{display:block;font-size:22px;font-weight:400}
   nav button.on{color:var(--brand);font-weight:700}
+  .av{border-radius:50%;object-fit:cover;vertical-align:middle;background:#fff;flex:0 0 auto}
+  #pad{width:100%;aspect-ratio:1;background:#fff;border:1px solid var(--line);border-radius:12px;touch-action:none;display:block}
+  .pens{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+  .pen{width:40px;height:40px;min-height:40px;border-radius:50%;padding:0;border:3px solid #fff;box-shadow:0 0 0 1px var(--line)}
+  .pen.on{box-shadow:0 0 0 3px var(--ink)}
+  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
+  .gallery button{padding:0;background:#fff;border:1px solid var(--line);overflow:hidden;min-height:0;display:block;position:relative}
+  .gallery img{width:100%;display:block;aspect-ratio:1;object-fit:cover}
+  .gallery i{position:absolute;left:6px;top:6px;width:14px;height:14px;border-radius:50%;border:2px solid #fff}
   .ste-logo-wrapper{display:flex;justify-content:center;margin:18px auto 10px}
   .ste-logo-img{width:min(220px,64%);height:auto;display:block}
   #print{display:none}
@@ -179,6 +190,7 @@
 </nav>
 <div id="layer"></div>
 <div id="print"></div>
+<input type="file" id="photoIn" accept="image/*" class="hidden">
 <script src="content.js"></script>
 <script src="app.js"></script>
 </body>

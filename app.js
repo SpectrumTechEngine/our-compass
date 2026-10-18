@@ -8,13 +8,13 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const clone = o => JSON.parse(JSON.stringify(o));
-  const pad = n => String(n).padStart(2, '0');
-  const dkey = t => { const d = new Date(t); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+  const two = n => String(n).padStart(2, '0');
+  const dkey = t => { const d = new Date(t); return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()); };
   const today = () => dkey(Date.now());
   const day = t => new Date(t).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
   const time = t => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   const hourName = h => (h % 12 || 12) + (h < 12 ? 'am' : 'pm');
-  const localInput = t => { const d = new Date(t); return dkey(t) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+  const localInput = t => { const d = new Date(t); return dkey(t) + 'T' + two(d.getHours()) + ':' + two(d.getMinutes()); };
 
   /* ---------- Owner usage numbers: counts only, never names, notes or diary words ---------- */
   function ste(f, ...a) { try { if (window.STE && window.STE[f]) window.STE[f](...a); } catch (e) {} }
@@ -27,9 +27,9 @@
     age = age || 'middle';
     return {
       id: uid(), name: name || '', emoji: emoji || '🦊', age, theme: 'plain', hard: [], tools: defaultTools(age),
-      readAloud: false, sounds: true, calmer: false, grown: age === 'teen', big: false, easy: false,
+      readAloud: false, sounds: true, calmer: false, grown: age === 'teen', big: false, easy: false, pda: false, simple: false, photo: '',
       calm: clone(C.CALM_IDEAS), plan: clone(C.PLAN_STEPS), cards: [],
-      checkins: [], battery: [], diary: [], notes: [], stories: [],
+      checkins: [], battery: [], diary: [], notes: [], stories: [], drawings: [],
       reward: { goals: [], target: 10, treat: '', stars: [], rounds: [] },
       ft: { first: null, then: null, firstDone: false },
       today: { name: 'Morning', items: clone(C.TODAY_PRESETS.Morning), done: [], day: '' },
@@ -59,6 +59,9 @@
   const teen = k => k.age === 'teen' || k.grown;
   const toolName = (t, k) => teen(k) ? t.teen : t.name;
   const toolById = id => C.TOOLS.find(t => t.id === id);
+  const face = (k, px) => k.photo ? '<img class="av" src="' + k.photo + '" alt="" style="width:' + px + 'px;height:' + px + 'px">' : esc(k.emoji);
+  const simpleWords = k => k.age === 'little' || k.simple;
+  const soft = (k, a, b) => k.pda ? b : a; // low-demand (PDA-friendly) wording: invitations, not instructions
 
   /* ---------- View state ---------- */
   let V = 'home', ST = {}, W = null, lockUntil = 0;
@@ -81,7 +84,7 @@
     }
     const kb = $('kidBtn');
     kb.classList.toggle('hidden', !k || V === 'setup');
-    if (k) kb.innerHTML = '<b>' + esc(k.emoji) + '</b><span>' + esc(k.name) + '</span>' + (D.kids.length > 1 ? ' ▾' : '');
+    if (k) kb.innerHTML = '<b>' + face(k, 28) + '</b><span>' + esc(k.name) + '</span>' + (D.kids.length > 1 ? ' ▾' : '');
     $('nav').classList.toggle('hidden', V === 'setup');
     document.querySelectorAll('#nav button').forEach(n => n.classList.toggle('on', n.dataset.v === navOf(V)));
     const meta = document.querySelector('meta[name=theme-color]');
@@ -99,6 +102,7 @@
     app.innerHTML = f(K());
     if (V === 'calm') startBreathing();
     if (V === 'timer') timerPaint();
+    if (V === 'draw' && ST.drawing) initPad();
   }
   function go(v, keepState) {
     if (!keepState) ST = { ptab: ST.ptab };
@@ -180,7 +184,7 @@
   const hardTags = k => { const s = new Set(); k.hard.forEach(h => { const H = C.HARD.find(x => x[0] === h); if (H) H[3].forEach(t => s.add(t)); }); return s; };
   function orderedBy(list, k) {
     const tags = hardTags(k);
-    return list.filter(x => !x.ages || x.ages.includes(k.age))
+    return list.filter(x => !x.ages || x.ages.includes(k.age) || (k.simple && x.ages.includes({ teen: 'middle', middle: 'little' }[k.age])))
       .map((x, i) => ({ x, s: i - (x.tags && x.tags.some(t => tags.has(t)) ? 1000 : 0) })).sort((a, b) => a.s - b.s).map(o => o.x);
   }
   const allScenarios = k => k.custom.scenarios.map(s => Object.assign({ mine: true }, s)).concat(orderedBy(C.SCENARIOS, k));
@@ -208,6 +212,7 @@
     if (w.step === 1) return card(head + '<h2>Who is it for?</h2>' +
       '<label class="lab" for="wName">First name or nickname</label><input type="text" id="wName" maxlength="24" data-f="w.name" value="' + esc(k.name) + '" placeholder="e.g. Sam">' +
       '<label class="lab">Pick a picture</label><div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(56px,1fr))">' + C.EMOJIS.map(e => '<button class="pick' + (k.emoji === e ? ' on' : '') + '" data-a="wEmoji" data-v="' + e + '" aria-label="' + e + '"><b>' + e + '</b></button>').join('') + '</div>' +
+      '<div class="row" style="margin-top:10px">' + (k.photo ? '<span class="no-grow">' + face(k, 48) + '</span><button class="light small no-grow" data-a="noPhoto" data-v="w">Remove photo</button>' : '<button class="light small no-grow" data-a="photo" data-v="w">📷 Or use a photo or drawing</button>') + '</div>' +
       '<label class="lab">Age group</label><p class="muted">This sets the look, the words, and which tools show first.</p><div class="grid" style="grid-template-columns:repeat(3,1fr)">' +
       Object.entries(C.AGES).map(([id, a]) => '<button class="pick' + (k.age === id ? ' on' : '') + '" data-a="wAge" data-v="' + id + '"><b>' + ({ little: '🧸', middle: '🎒', teen: '🎧' })[id] + '</b>' + a.label + '<small>' + a.sub + '</small></button>').join('') + '</div>' +
       '<p id="wErr" class="muted" role="status"></p>' + nav('wNext'));
@@ -223,7 +228,9 @@
       '<div class="row" style="margin-top:14px"><button class="light" data-a="wAnother">+ Add another child</button><button data-a="wDone">Start</button></div>');
   };
   function lookSwitches(k, p) {
-    return sw('Read it aloud', p + 'readAloud', k.readAloud, canSpeak() ? 'A 🔊 button on cards and stories' : 'Not available on this phone or in the Android app yet') +
+    return sw('Low-demand (PDA-friendly)', p + 'pda', k.pda, 'Gentle invitations instead of instructions, and no countdowns. Turns off the timer, star chart and first/then (you can switch them back on).') +
+      sw('Simpler words', p + 'simple', k.simple, 'Easier reading in the check-in and everyday moments, while keeping the look right for their age') +
+      sw('Read it aloud', p + 'readAloud', k.readAloud, canSpeak() ? 'A 🔊 button on cards and stories' : 'Not available on this phone or in the Android app yet') +
       sw('Sounds', p + 'sounds', k.sounds, 'Gentle chime for stars and timers') +
       sw('Calmer animations', p + 'calmer', k.calmer, 'Slower, softer movement') +
       sw('Grown-up look', p + 'grown', k.grown, 'Plainer, less playful, good for teens') +
@@ -235,12 +242,12 @@
   VIEWS.home = function (k) {
     const th = C.THEMES[k.theme];
     let h = th.deco.length ? '<div class="deco" aria-hidden="true">' + th.deco.join('') + '</div>' : '';
-    h += '<p class="hello">' + (k.age === 'little' ? 'Hi ' + esc(k.name) + '! 👋' : 'Hi ' + esc(k.name)) + '</p>';
+    h += '<p class="hello">' + (k.photo ? face(k, 44) + ' ' : '') + (k.age === 'little' ? 'Hi ' + esc(k.name) + '! 👋' : 'Hi ' + esc(k.name)) + '</p>';
     if (D.timer) h += timerBanner();
-    if (k.tools.checkin) h += card('<div class="row" style="margin-bottom:8px"><h2 style="margin:0">' + (k.age === 'little' ? 'How do you feel?' : 'How are you feeling?') + '</h2>' + '<span class="no-grow">' + sayBtn(k, 'How do you feel? Blue, green, yellow or red?') + '</span></div><div class="colours mini">' +
-      C.COLOURS.map(c => '<button class="colour" style="background:' + c.hex + '" data-a="checkin" data-v="' + c.id + '">' + esc(k.age === 'little' ? c.little : c.word) + '</button>').join('') + '</div>');
+    if (k.tools.checkin) h += card('<div class="row" style="margin-bottom:8px"><h2 style="margin:0">' + (k.pda ? 'Want to share how you feel?' : k.age === 'little' ? 'How do you feel?' : 'How are you feeling?') + '</h2>' + '<span class="no-grow">' + sayBtn(k, 'How do you feel? Blue, green, yellow or red?') + '</span></div><div class="colours mini">' +
+      C.COLOURS.map(c => '<button class="colour" style="background:' + c.hex + '" data-a="checkin" data-v="' + c.id + '">' + esc(simpleWords(k) ? c.little : c.word) + '</button>').join('') + '</div>');
     const tools = orderedTools(k).filter(t => t.id !== 'checkin' || !k.tools.checkin);
-    h += '<div class="grid">' + orderedTools(k).filter(t => t.id !== 'checkin').map(t => '<button class="tile" data-a="nav" data-v="' + t.id + '"><b>' + t.emoji + '</b>' + esc(toolName(t, k)) + (k.age !== 'little' ? '<small>' + esc(t.desc) + '</small>' : '') + '</button>').join('') +
+    h += '<div class="grid">' + orderedTools(k).filter(t => t.id !== 'checkin').map(t => '<button class="tile" data-a="nav" data-v="' + t.id + '"><b>' + t.emoji + '</b>' + esc(toolName(t, k)) + (!simpleWords(k) ? '<small>' + esc(t.desc) + '</small>' : '') + '</button>').join('') +
       '<button class="tile" data-a="nav" data-v="passport"><b>🪪</b>All about me' + (k.age !== 'little' ? '<small>What helps me, to share</small>' : '') + '</button></div>';
     if (!tools.length) h += '<p class="muted">All the tools are switched off. A grown-up can switch them on in Settings.</p>';
     return h + '<div style="margin-top:16px">' + disclaimer + '</div>' + logo;
@@ -248,27 +255,27 @@
 
   /* ---------- Colour check-in ---------- */
   VIEWS.checkin = function (k) {
-    return backBtn('home', 'Home') + card('<div class="row"><h2 style="margin:0">' + (k.age === 'little' ? 'How do you feel?' : 'How are you feeling?') + '</h2><span class="no-grow">' + sayBtn(k, 'How do you feel? Pick a colour.') + '</span></div>' +
-      '<p class="muted">Pick the colour that fits. Every colour is OK.</p><div class="colours">' +
-      C.COLOURS.map(c => '<button class="colour" style="background:' + c.hex + '" data-a="checkin" data-v="' + c.id + '">' + esc(k.age === 'little' ? c.little : c.name + ': ' + c.word) + (k.age !== 'little' ? '<small>' + esc(c.sub) + '</small>' : '') + '</button>').join('') + '</div>');
+    return backBtn('home', 'Home') + card('<div class="row"><h2 style="margin:0">' + (k.pda ? 'Want to share how you feel?' : k.age === 'little' ? 'How do you feel?' : 'How are you feeling?') + '</h2><span class="no-grow">' + sayBtn(k, 'How do you feel? Pick a colour.') + '</span></div>' +
+      '<p class="muted">' + soft(k, 'Pick the colour that fits. Every colour is OK.', 'Only if you want to. Every colour is OK.') + '</p><div class="colours">' +
+      C.COLOURS.map(c => '<button class="colour" style="background:' + c.hex + '" data-a="checkin" data-v="' + c.id + '">' + esc(simpleWords(k) ? c.little : c.name + ': ' + c.word) + (!simpleWords(k) ? '<small>' + esc(c.sub) + '</small>' : '') + '</button>').join('') + '</div>');
   };
   VIEWS.checkin2 = function (k) {
     const e = k.checkins[ST.ci]; if (!e) return VIEWS.checkin(k);
     const c = C.COLOURS.find(x => x.id === e.c);
-    const msg = { blue: 'Feeling low is OK. Go gently.', green: 'Lovely. Enjoy it!', yellow: 'Feeling wobbly is OK. Something here might help.', red: 'Everything feels like too much. That\'s OK. Let\'s get calmer.' }[e.c];
-    let h = '<div class="card" style="background:' + c.soft + ';border-color:' + c.hex + '"><h2 style="color:' + c.hex + '">' + esc(k.age === 'little' ? c.little : c.name + ': ' + c.word) + '</h2><p>' + esc(msg) + '</p>' + sayBtn(k, msg) + '</div>';
-    if (k.calm[e.c] && k.calm[e.c].length) h += card('<h2>' + (e.c === 'green' ? 'Ideas' : 'Things that might help') + '</h2>' +
+    const msg = { blue: 'Feeling low is OK. Go gently.', green: 'Lovely. Enjoy it!', yellow: 'Feeling wobbly is OK. Something here might help.', red: 'Everything feels like too much. That\'s OK. ' + soft(k, 'Let\'s get calmer.', 'Take all the time you need.') }[e.c];
+    let h = '<div class="card" style="background:' + c.soft + ';border-color:' + c.hex + '"><h2 style="color:' + c.hex + '">' + esc(simpleWords(k) ? c.little : c.name + ': ' + c.word) + '</h2><p>' + esc(msg) + '</p>' + sayBtn(k, msg) + '</div>';
+    if (k.calm[e.c] && k.calm[e.c].length) h += card('<h2>' + (e.c === 'green' ? 'Ideas' : soft(k, 'Things that might help', 'Ideas, if you want them')) + '</h2>' +
       k.calm[e.c].map(i => '<button class="opt' + (e.idea === i ? ' open good' : '') + '" data-a="idea" data-v="' + esc(i) + '">' + (e.idea === i ? '✅ ' : '') + esc(i) + '</button>').join('') +
       (e.idea ? '<p class="ok">Good plan 👍</p>' : ''));
     if (k.age !== 'little' && e.c !== 'green') h += card('<h2>Where do you feel it?</h2><p class="muted">Optional. Noticing body clues early can help next time.</p>' + chipList(C.BODY_CLUES, e.body || [], 'bodyClue'));
     if (k.age === 'little' && (e.c === 'red' || e.c === 'yellow')) h += '<p class="note">You can show this screen to a grown-up.</p>';
-    return backBtn('home', 'Home') + h + '<div class="row">' + (k.tools.calm ? '<button class="light" data-a="nav" data-v="calm">🫧 Calm corner</button>' : '') + '<button data-a="nav" data-v="home">Done</button></div>';
+    return backBtn('home', 'Home') + h + '<div class="row">' + (k.tools.calm ? '<button class="light" data-a="nav" data-v="calm">🫧 Calm corner</button>' : '') + (k.tools.draw ? '<button class="light" data-a="drawFor">🖍️ Draw it</button>' : '') + '<button data-a="nav" data-v="home">Done</button></div>';
   };
 
   /* ---------- Calm corner ---------- */
   VIEWS.calm = function (k) {
     const pace = ST.pace || 4;
-    return backBtn('home', 'Home') + card('<h2>' + (teen(k) ? 'Breathe' : 'Calm corner') + '</h2><p class="muted">Follow the circle. Breathe in as it grows, out as it shrinks.</p>' +
+    return backBtn('home', 'Home') + card('<h2>' + (teen(k) ? 'Breathe' : 'Calm corner') + '</h2><p class="muted">' + soft(k, 'Follow the circle. Breathe in as it grows, out as it shrinks.', 'If you like, breathe along with the circle. Stop whenever you want.') + '</p>' +
       '<div class="breathe" id="breathe" style="--pace:' + pace + 's"><div class="ball"></div><div class="txt" id="breatheTxt">Get ready…</div></div>' +
       '<p class="muted" style="text-align:center" id="breathCount" aria-live="polite"></p>' +
       '<div class="row" style="justify-content:center"><span class="muted no-grow">Speed:</span>' + [[4, 'Quicker'], [5, 'Medium'], [6, 'Slower']].map(([v, l]) => '<button class="chip no-grow' + (pace === v ? ' on' : '') + '" data-a="pace" data-v="' + v + '">' + l + '</button>').join('') + '</div>');
@@ -341,7 +348,7 @@
 
   /* ---------- Timer ---------- */
   function timerLeft() { return D.timer ? Math.max(0, D.timer.end - Date.now()) : 0; }
-  function leftWords(ms) { if (ms <= 0) return 'Time\'s up'; if (ms < 60000) return Math.ceil(ms / 1000) + ' seconds'; const m = Math.ceil(ms / 60000); return m + (m === 1 ? ' minute' : ' minutes'); }
+  function leftWords(ms) { if (ms <= 0) return 'Time\'s up'; if (K() && K().pda && D.timer) return ms > D.timer.total / 3 ? 'Still some time' : 'Nearly time'; if (ms < 60000) return Math.ceil(ms / 1000) + ' seconds'; const m = Math.ceil(ms / 60000); return m + (m === 1 ? ' minute' : ' minutes'); }
   function timerBanner() {
     const ms = timerLeft();
     return '<button class="opt" data-a="nav" data-v="timer" style="border-color:var(--brand)">⏳ <b id="tBan">' + esc(ms ? leftWords(ms) + ' until ' + D.timer.label : 'Time for: ' + D.timer.label) + '</b></button>';
@@ -365,7 +372,7 @@
     const pie = $('tPie'); if (!pie || !D.timer) return;
     const ms = timerLeft(), frac = D.timer.total ? ms / D.timer.total : 0;
     pie.style.background = 'conic-gradient(var(--brand2) ' + Math.round(frac * 360) + 'deg, var(--tint) 0)';
-    $('tTxt').textContent = ms < 60000 ? Math.ceil(ms / 1000) + 's' : Math.ceil(ms / 60000) + ' min';
+    $('tTxt').textContent = K().pda ? '' : ms < 60000 ? Math.ceil(ms / 1000) + 's' : Math.ceil(ms / 60000) + ' min';
     const hd = $('tHead'); if (hd) hd.textContent = leftWords(ms) + ' until ' + D.timer.label;
   }
   setInterval(() => {
@@ -393,6 +400,7 @@
       '<div class="row" style="margin-top:12px"><button data-a="tdEditDone">Done</button></div>');
     const all = t.items.length && t.done.length >= t.items.length;
     return backBtn('home', 'Home') + card('<div class="row"><h2 style="margin:0">' + esc(t.name || 'Today') + '</h2><span class="no-grow">' + sayBtn(k, t.items.map(i => i[1]).join('. ')) + '</span></div>' +
+      (k.pda ? '<p class="muted">Your list, your way. Tick things if you like.</p>' : '') +
       (t.items.length ? t.items.map((it, i) => { const d = t.done.includes(i); return '<button class="opt' + (d ? ' open good' : '') + '" data-a="tdTick" data-v="' + i + '" style="font-size:1.05em' + (d ? ';opacity:.7' : '') + '">' + (d ? '✅' : '⬜') + ' ' + esc(it[0]) + ' ' + esc(it[1]) + '</button>'; }).join('') : '<p class="muted">No steps yet.</p>') +
       (all ? '<p class="ok" style="text-align:center;font-size:1.15em">🎉 All done!</p>' : '') +
       '<button class="ghost" data-a="tdEdit">✏️ Change the list</button>');
@@ -440,14 +448,14 @@
   /* ---------- What would you do? ---------- */
   VIEWS.scenarios = function (k) {
     const list = allScenarios(k);
-    return backBtn('home', 'Home') + card('<h2>What would you do?</h2><p class="muted">Everyday moments. There are no wrong answers: tap each choice to see how other people might feel.</p><ul class="list">' +
+    return backBtn('home', 'Home') + card('<h2>What would you do?</h2><p class="muted">' + soft(k, 'Everyday moments. There are no wrong answers: tap each choice to see how other people might feel.', 'Everyday moments, with no right or wrong answers. Have a look at any choice to see how other people might feel.') + '</p><ul class="list">' +
       list.map(s => '<li><div class="grow"><div class="name">' + esc(s.title) + (s.mine ? ' <span class="tag">✏️ Ours</span>' : '') + '</div></div><button class="small light" data-a="scOpen" data-v="' + esc(s.id) + '">Open</button></li>').join('') + '</ul>' +
       '<div class="row" style="margin-top:10px"><button class="light" data-a="scNew">✏️ Write your own (grown-up)</button></div>');
   };
   VIEWS.scenario = function (k) {
     const list = allScenarios(k), i = list.findIndex(s => s.id === ST.sc), s = list[i]; if (!s) return VIEWS.scenarios(k);
     const open = ST.open || [];
-    let h = '<div class="row"><h2 style="margin:0">' + esc(s.title) + '</h2><span class="no-grow">' + sayBtn(k, s.text) + '</span></div><p style="font-size:1.08em">' + esc(s.text) + '</p><p class="muted">What could you do? Tap each one.</p>';
+    let h = '<div class="row"><h2 style="margin:0">' + esc(s.title) + '</h2><span class="no-grow">' + sayBtn(k, s.text) + '</span></div><p style="font-size:1.08em">' + esc(s.text) + '</p><p class="muted">' + soft(k, 'What could you do? Tap each one.', 'Some ideas. Peek at any of them.') + '</p>';
     s.options.forEach((o, j) => {
       const on = open.includes(j);
       h += '<button class="opt' + (on ? ' open' + (o.good ? ' good' : '') : '') + '" data-a="scOpt" data-v="' + j + '">' + esc(o.t) + '</button>';
@@ -499,6 +507,43 @@
         ((e.good || []).length && (e.note || e.what) ? '<p>' + esc(e.note || e.what) + '</p>' : '') + '<p class="muted">' + esc(day(e.t)) + '</p></div></div>')).join('') : '<p class="muted">No wins saved yet. They\'ll show up here.</p>');
   };
 
+  /* ---------- Draw it ---------- */
+  const PENS = ['#22313a', '#e85aa8', '#86398b', '#4a7fc1', '#3f9a63', '#d6a21e', '#c9503f', '#8a5a3c', '#ffffff'];
+  let pad = null;
+  VIEWS.draw = function (k) {
+    if (ST.drawing) {
+      ST.pen = ST.pen || PENS[1]; ST.size = ST.size || 8;
+      return backBtn('draw', 'Back') + card('<h2>' + (ST.c ? soft(k, 'Draw how you feel', 'Draw how you feel, if you like') : 'Draw anything') + '</h2>' +
+        '<canvas id="pad" aria-label="Drawing space"></canvas>' +
+        '<div class="pens">' + PENS.map(p => '<button class="pen' + (ST.pen === p ? ' on' : '') + '" style="background:' + p + '" data-a="pen" data-v="' + p + '" aria-label="' + (p === '#ffffff' ? 'Rubber' : 'Colour') + '"></button>').join('') + '</div>' +
+        '<div class="chips">' + [[4, 'Thin'], [8, 'Medium'], [18, 'Thick']].map(([v, l]) => '<button class="chip size' + (ST.size === v ? ' on' : '') + '" data-a="penSize" data-v="' + v + '">' + l + '</button>').join('') + '</div>' +
+        '<div class="row" style="margin-top:8px"><button class="light" data-a="padUndo">↶ Undo</button><button class="light" data-a="padClear">Clear</button><button data-a="padSave">Save</button></div>');
+    }
+    return backBtn('home', 'Home') + card('<h2>🖍️ ' + esc(toolName(toolById('draw'), k)) + '</h2><p class="muted">Draw how you feel, or anything you like. Drawings stay on this phone.</p><button data-a="padNew">New drawing</button>') +
+      (k.drawings.length ? card('<div class="gallery">' + k.drawings.map((d, i) => '<button data-a="drawShow" data-v="' + i + '"><img src="' + d.img + '" alt="Drawing from ' + esc(day(d.t)) + '">' + (d.c ? '<i style="background:' + (C.COLOURS.find(c => c.id === d.c) || {}).hex + '"></i>' : '') + '</button>').join('') + '</div>') : '');
+  };
+  function initPad() {
+    const c = $('pad'); if (!c) return;
+    const r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.lineCap = x.lineJoin = 'round';
+    pad = { c, x, undo: [] };
+    let down = false, last = null;
+    const pt = e => { const b = c.getBoundingClientRect(); return { x: (e.clientX - b.left) * dpr, y: (e.clientY - b.top) * dpr }; };
+    const line = (a, b) => { x.strokeStyle = ST.pen; x.lineWidth = ST.size * dpr; x.beginPath(); x.moveTo(a.x, a.y); x.lineTo(b.x, b.y); x.stroke(); };
+    c.onpointerdown = e => { down = true; try { c.setPointerCapture(e.pointerId); } catch (_) {} pad.undo.push(x.getImageData(0, 0, c.width, c.height)); if (pad.undo.length > 12) pad.undo.shift(); last = pt(e); line(last, { x: last.x + 0.1, y: last.y }); };
+    c.onpointermove = e => { if (!down) return; const p = pt(e); line(last, p); last = p; };
+    c.onpointerup = c.onpointercancel = () => { down = false; };
+  }
+  // Makes a small JPEG copy of a picture or drawing (crop = cut to a square from the middle)
+  function shrink(src, w, h, crop) {
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const g = cv.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+    const sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height, s = Math.min(sw, sh);
+    if (crop) g.drawImage(src, (sw - s) / 2, (sh - s) / 2, s, s, 0, 0, w, h); else g.drawImage(src, 0, 0, w, h);
+    return cv.toDataURL('image/jpeg', 0.75);
+  }
+
   /* ---------- My notes (private) ---------- */
   VIEWS.notes = function (k) {
     return backBtn('home', 'Home') + card('<h2>📓 My notes</h2><p class="muted">Just for you. They aren\'t shown in the grown-ups\' area or in any summary. (Anyone who opens this screen on this phone could read them, though.)</p>' +
@@ -524,7 +569,7 @@
   };
   function passportHtml(k, onScreen) {
     const p = k.passport;
-    let h = '<h2>' + esc(k.emoji) + ' All about ' + esc(k.name) + '</h2>';
+    let h = '<h2>' + face(k, 40) + ' All about ' + esc(k.name) + '</h2>';
     PASS.forEach(([id, l]) => { if (p[id].trim()) h += '<h3>' + esc(l) + '</h3><p style="white-space:pre-wrap">' + esc(p[id]) + '</p>'; });
     const ss = C.SENSES.filter(([id]) => p.sense[id] || (p.senseNote[id] || '').trim());
     if (ss.length) h += '<h3>My senses</h3><ul class="list">' + ss.map(([id, e, l]) => '<li><span>' + e + '</span><div class="grow"><b>' + esc(l) + ':</b> ' + esc((C.SENSE_LEVELS.find(x => x[0] === p.sense[id]) || ['', ''])[1]) + (p.senseNote[id] ? (p.sense[id] ? '. ' : '') + esc(p.senseNote[id]) : '') + '</div></li>').join('') + '</ul>';
@@ -748,11 +793,12 @@
 
   /* Settings */
   function gSettings(k) {
-    let h = card('<h2>Children</h2><ul class="list">' + D.kids.map(x => '<li><span style="font-size:28px">' + esc(x.emoji) + '</span><div class="grow"><div class="name">' + esc(x.name) + '</div><div class="muted">' + esc(C.AGES[x.age].label) + '</div></div>' +
+    let h = card('<h2>Children</h2><ul class="list">' + D.kids.map(x => '<li><span style="font-size:28px">' + face(x, 34) + '</span><div class="grow"><div class="name">' + esc(x.name) + '</div><div class="muted">' + esc(C.AGES[x.age].label) + '</div></div>' +
       (x.id === k.id ? '<span class="tag no-grow">Showing now</span>' : '<button class="small light" data-a="switchKid" data-v="' + x.id + '">Switch</button>') + '</li>').join('') + '</ul>' +
       '<div class="row" style="margin-top:8px"><button class="light" data-a="addKid">+ Add a child</button></div>');
     h += card('<h2>' + esc(k.name) + '</h2><label class="lab">Name</label><input type="text" maxlength="24" data-f="k.name" value="' + esc(k.name) + '">' +
       '<label class="lab">Picture</label><div class="chips">' + C.EMOJIS.map(e => '<button class="chip' + (k.emoji === e ? ' on' : '') + '" data-a="kEmoji" data-v="' + e + '">' + e + '</button>').join('') + '</div>' +
+      '<div class="row" style="margin-top:10px">' + (k.photo ? '<span class="no-grow">' + face(k, 48) + '</span><button class="light small no-grow" data-a="noPhoto" data-v="k">Remove photo</button>' : '<button class="light small no-grow" data-a="photo" data-v="k">📷 Use a photo or drawing instead</button>') + '</div>' +
       '<label class="lab">Age group</label><div class="chips">' + Object.entries(C.AGES).map(([id, a]) => '<button class="chip' + (k.age === id ? ' on' : '') + '" data-a="kAge" data-v="' + id + '">' + a.label + ' (' + a.sub + ')</button>').join('') + '</div>' +
       '<label class="lab">Theme</label><div class="chips">' + Object.entries(C.THEMES).map(([id, t]) => '<button class="chip' + (k.theme === id ? ' on' : '') + '" data-a="kTheme" data-v="' + id + '">' + t.emoji + ' ' + t.label + '</button>').join('') + '</div>' +
       '<label class="lab">What\'s hardest right now?</label><div class="chips">' + C.HARD.map(x => '<button class="chip' + (k.hard.includes(x[0]) ? ' on' : '') + '" data-a="kHard" data-v="' + x[0] + '">' + esc(x[1]) + '</button>').join('') + '</div>' +
@@ -777,7 +823,7 @@
   const ACT = {
     nav: v => { if (v === 'grown') return requireGrown(() => go('grown')); if (v === 'passport') used('passport'); go(v); },
     kids: () => {
-      sheet('<h2>Who\'s using it?</h2><ul class="list">' + D.kids.map(x => '<li><span style="font-size:30px">' + esc(x.emoji) + '</span><span class="grow name">' + esc(x.name) + '</span>' + (x.id === D.cur ? '<span class="tag">Now</span>' : '<button class="small" data-a="switchKid" data-v="' + x.id + '">Switch</button>') + '</li>').join('') + '</ul>' +
+      sheet('<h2>Who\'s using it?</h2><ul class="list">' + D.kids.map(x => '<li><span style="font-size:30px">' + face(x, 36) + '</span><span class="grow name">' + esc(x.name) + '</span>' + (x.id === D.cur ? '<span class="tag">Now</span>' : '<button class="small" data-a="switchKid" data-v="' + x.id + '">Switch</button>') + '</li>').join('') + '</ul>' +
         '<div class="row" style="margin-top:10px"><button class="light" data-a="addKid">+ Add a child (grown-up)</button></div>');
     },
     switchKid: v => { D.cur = v; save(); closeLayer(); ST = { ptab: ST.ptab }; render(); toast('Showing ' + K().name); },
@@ -901,6 +947,29 @@
     ruleSave: () => { const s = ST.se; if (!s.title.trim() || !s.text.trim()) { toast('Add a title and the rule.'); return; } K().custom.rules.unshift({ id: 'r' + uid(), title: s.title.trim(), text: s.text.trim() }); save(); go('rules'); },
     ruleDel: v => requireGrown(() => { if (!confirm('Delete this rule?')) return go('rules'); const k = K(); k.custom.rules = k.custom.rules.filter(x => x.id !== v); save(); go('rules'); }),
 
+    /* drawing and pictures */
+    drawFor: () => { const e = K().checkins[ST.ci]; ST = { drawing: true, c: e ? e.c : '' }; V = 'draw'; render(); window.scrollTo(0, 0); used('drawing-started'); },
+    padNew: () => { ST = { drawing: true }; render(); used('drawing-started'); },
+    pen: (v, el) => { ST.pen = v; document.querySelectorAll('.pen').forEach(b => b.classList.toggle('on', b === el)); },
+    penSize: (v, el) => { ST.size = +v; document.querySelectorAll('.chip.size').forEach(b => b.classList.toggle('on', b === el)); },
+    padUndo: () => { if (pad && pad.undo.length) pad.x.putImageData(pad.undo.pop(), 0, 0); },
+    padClear: () => { if (!pad) return; pad.undo.push(pad.x.getImageData(0, 0, pad.c.width, pad.c.height)); pad.x.fillStyle = '#fff'; pad.x.fillRect(0, 0, pad.c.width, pad.c.height); },
+    padSave: () => {
+      if (!pad || !pad.undo.length) { toast('Draw something first.'); return; }
+      const k = K(); k.drawings.unshift({ t: Date.now(), img: shrink(pad.c, 360, 360), c: ST.c || '' });
+      if (k.drawings.length > 40) k.drawings.length = 40;
+      save(); used('drawing-saved'); ST = {}; render(); toast('Saved 🖍️');
+    },
+    drawShow: v => {
+      const d = K().drawings[+v]; if (!d) return;
+      sheet('<img src="' + d.img + '" alt="" style="width:100%;border-radius:12px;background:#fff"><p class="muted">' + esc(day(d.t) + ', ' + time(d.t)) + '</p>' +
+        '<div class="row"><button class="light" data-a="drawAsPhoto" data-v="' + v + '">Use as my picture</button><button class="light" data-a="drawDel" data-v="' + v + '">Delete</button><button data-a="closeLayer">Close</button></div>');
+    },
+    drawAsPhoto: v => { const d = K().drawings[+v]; if (!d) return; const im = new Image(); im.onload = () => { K().photo = shrink(im, 160, 160, true); save(); closeLayer(); render(); toast('That\'s your picture now.'); }; im.src = d.img; },
+    drawDel: v => { if (!confirm('Delete this drawing?')) return; K().drawings.splice(+v, 1); save(); closeLayer(); render(); },
+    photo: v => { ST.photoFor = v; $('photoIn').click(); },
+    noPhoto: v => { const k = v === 'w' ? W.kid : K(); k.photo = ''; if (v !== 'w') save(); render(); },
+
     /* battery, wins, notes */
     bat: v => { K().battery.unshift({ t: Date.now(), v: +v }); save(); used('battery'); ST.bat = +v; render(); },
     addWin: () => { const t = (ST.win || '').trim(); if (!t) return; K().diary.unshift({ id: uid(), t: Date.now(), type: 'good', by: 'child', good: [], note: t.slice(0, 120), ticks: [] }); ST.win = ''; save(); chime(); used('win-added'); render(); },
@@ -1020,6 +1089,8 @@
     const root = { k: K(), kl: K(), d: D, w: W && W.kid, s: ST, f: ST.F }[pre]; if (!root) return;
     if (pre === 'k' && path === 'name') val = val.slice(0, 24);
     setPath(root, path, val);
+    if ((pre === 'k' || pre === 'w') && path === 'pda' && val) { root.tools.timer = false; root.tools.reward = false; root.tools.firstthen = false; }
+    if ((pre === 'k' || pre === 'w') && path === 'simple' && val && canSpeak()) root.readAloud = true;
     if (pre === 'k' || pre === 'kl' || pre === 'd') save();
     if (pre === 'k' && path === 'name') applyLook();
     if (e.type === 'change' && el.hasAttribute('data-rr')) render();
@@ -1027,6 +1098,7 @@
   document.addEventListener('input', e => { if (e.target.type !== 'checkbox') onField(e); });
   document.addEventListener('change', e => {
     if (e.target.id === 'restoreIn') return restoreFile(e.target);
+    if (e.target.id === 'photoIn') return photoFile(e.target);
     if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') onField(e);
   });
   document.addEventListener('submit', e => {
@@ -1036,6 +1108,13 @@
     if (ans === a * b) { lockUntil = Date.now() + 10 * 60000; const fn = ST.after; ST = { ptab: ST.ptab }; if (fn) fn(); else go('grown'); }
     else { $('lockMsg').textContent = 'Not quite. Try again.'; $('lockIn').value = ''; $('lockIn').focus(); }
   });
+  function photoFile(input) {
+    const file = input.files[0]; input.value = ''; if (!file) return;
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onload = () => { const k = ST.photoFor === 'w' && W ? W.kid : K(); k.photo = shrink(im, 160, 160, true); URL.revokeObjectURL(url); if (ST.photoFor !== 'w') save(); render(); };
+    im.onerror = () => toast('That picture couldn\'t be opened.');
+    im.src = url;
+  }
   async function restoreFile(input) {
     const file = input.files[0]; input.value = ''; if (!file) return;
     try {

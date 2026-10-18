@@ -13,6 +13,8 @@ window.OC_CONTENT = (function () {
     animals: { label: 'Animals', emoji: '🐾', deco: ['🐶', '🐱', '🦊', '🐢', '🦉'] },
     space:   { label: 'Space',   emoji: '🚀', deco: ['🪐', '⭐', '🌙', '🛰️', '☄️'] },
     nature:  { label: 'Nature',  emoji: '🌿', deco: ['🌳', '🌼', '🍄', '🌊', '🦋'] },
+    pinkpurple: { label: 'Pink & purple', emoji: '💜', deco: ['💜', '🩷', '✨', '🎨', '🎀'] },
+    ocean:   { label: 'Ocean',   emoji: '🚢', deco: ['🚢', '🌊', '⚓', '🐋', '🧭'] },
     plain:   { label: 'Plain',   emoji: '◻️', deco: [] }
   };
 
@@ -24,7 +26,7 @@ window.OC_CONTENT = (function () {
     ['transitions', 'Stopping one thing to start another', ['timer', 'firstthen'],      ['change']],
     ['losing',      'Losing a game',                    ['scenarios'],                  ['losing']],
     ['friends',     'Friendships',                      ['scenarios', 'rules', 'battery'], ['friends']],
-    ['big',         'Big feelings and meltdowns',       ['checkin', 'calm', 'cards'],   ['feelings']],
+    ['big',         'Big feelings and meltdowns',       ['checkin', 'calm', 'cards', 'draw'], ['feelings']],
     ['interrupting','Interrupting or waiting a turn',   ['scenarios', 'rules'],         ['turns']],
     ['sharing',     'Sharing',                          ['scenarios'],                  ['sharing']],
     ['sensory',     'Noise, crowds and busy places',    ['cards', 'battery', 'calm'],   ['sensory']],
@@ -39,6 +41,7 @@ window.OC_CONTENT = (function () {
   const TOOLS = [
     { id: 'checkin',   emoji: '🎨', name: 'How am I?',          teen: 'Check-in',          desc: 'Pick a colour for how you feel', on: ['little', 'middle', 'teen'] },
     { id: 'calm',      emoji: '🫧', name: 'Calm corner',        teen: 'Breathe',           desc: 'Slow breathing to feel calmer', on: ['little', 'middle', 'teen'] },
+    { id: 'draw',      emoji: '🖍️', name: 'Draw it',            teen: 'Draw',              desc: 'Draw how you feel, or anything you like', on: ['little', 'middle', 'teen'] },
     { id: 'cards',     emoji: '🪧', name: 'Show a card',        teen: 'Quick cards',       desc: 'Show a card when words are hard', on: ['little', 'middle', 'teen'] },
     { id: 'reward',    emoji: '⭐', name: 'Star chart',         teen: 'Goals',             desc: 'Stars towards a treat', on: ['little', 'middle', 'teen'] },
     { id: 'firstthen', emoji: '➡️', name: 'First / then',       teen: 'First / then',      desc: 'What happens first, then next', on: ['little', 'middle'] },
