@@ -66,7 +66,7 @@ window.OC_CONTENT = (function () {
     blue:   ['Have a snack or a drink', 'Wrap up in a blanket', 'Listen to a favourite song', 'Ask for a hug', 'Rest for a while'],
     green:  ['Do something I enjoy', 'Help someone', 'Notice what is making today good'],
     yellow: ['Take 5 slow breaths', 'Squeeze a cushion', 'Go for a short walk', 'Ask for a break', 'Put on my headphones'],
-    red:    ['Go to my calm space', 'Breathe with the calm corner', 'Push hard against a wall', 'No talking for a while, that\'s OK', 'Ask a grown-up to stay close']
+    red:    ['Go to my calm space', 'Breathe with the calm corner', 'Push hard against a wall', 'No talking for a while, that\'s OK', 'Ask a parent to stay close']
   };
   const BODY_CLUES = ['Fast heartbeat', 'Hot face', 'Tight tummy', 'Clenched hands', 'Heavy body', 'Want to hide', 'Can\'t sit still', 'Tears', 'Loud voice', 'Head buzzing'];
 
@@ -140,8 +140,8 @@ window.OC_CONTENT = (function () {
        O('Say "Can we play again?"', 'Lots of people like a rematch! Your cousin will probably say yes.', true)],
       'Losing feels bad for everyone. It\'s fine to need a minute before saying anything.'),
     S('change-park', ['little', 'middle'], ['change'], 'The plan changed', 'You were going to the park, but it is raining so you are staying in.',
-      [O('Feel cross and say "That\'s not fair!"', 'Your grown-up understands. Changes are hard. They might feel sad that you are upset too.'),
-       O('Ask "When can we go instead?"', 'Your grown-up feels glad you asked. Knowing the new plan can make it easier.', true),
+      [O('Feel cross and say "That\'s not fair!"', 'Your parent understands. Changes are hard. They might feel sad that you are upset too.'),
+       O('Ask "When can we go instead?"', 'Your parent feels glad you asked. Knowing the new plan can make it easier.', true),
        O('Pick something else to do inside', 'This can turn the day around. Your family might enjoy it too.', true)],
       'It\'s OK to feel upset about a change. Asking "what happens now?" can help.'),
     S('wait-turn-slide', ['little'], ['turns'], 'Waiting for the slide', 'There is a line of children waiting for the slide.',
@@ -153,13 +153,13 @@ window.OC_CONTENT = (function () {
        O('Hold it tight and turn away', 'Your friend might feel sad. It\'s OK to have special toys you don\'t share. You could put those away before friends come.'),
        O('Find another toy for them', 'Kind idea! Your friend can play too.', true)],
       'Some things are too special to share, and that\'s OK. Putting them away before visitors comes helps.'),
-    S('interrupt-talk', ['little', 'middle'], ['turns'], 'Something important to say', 'Your grown-up is talking to another adult. You really want to tell them something.',
-      [O('Put a hand on their arm and wait', 'Many grown-ups like this. They know you are waiting and will turn to you soon.', true),
+    S('interrupt-talk', ['little', 'middle'], ['turns'], 'Something important to say', 'Your parent is talking to another adult. You really want to tell them something.',
+      [O('Put a hand on their arm and wait', 'Many parents like this. They know you are waiting and will turn to you soon.', true),
        O('Say it loudly straight away', 'The adults might feel surprised, because they hadn\'t finished. If it\'s urgent (someone hurt), saying it straight away is right.'),
        O('Hold the idea in your head, or draw it', 'Then you won\'t forget it while you wait.', true)],
       'Waiting is hard when your brain is full of the idea. A sign like a hand on the arm can help.'),
     S('noisy-party', ['little', 'middle'], ['sensory'], 'A noisy party', 'You are at a birthday party. It is very loud and your ears hurt.',
-      [O('Tell a grown-up "It\'s too loud"', 'Your grown-up can help you find a quieter spot. They\'re glad you told them.', true),
+      [O('Tell a parent "It\'s too loud"', 'Your parent can help you find a quieter spot. They\'re glad you told them.', true),
        O('Go somewhere quieter for a while', 'Good choice. You can come back when you feel ready.', true),
        O('Cover your ears and hide', 'This makes sense, it\'s too loud! Telling someone too means they can help.')],
       'Your senses are real. Taking a break isn\'t rude.'),
@@ -219,7 +219,7 @@ window.OC_CONTENT = (function () {
        O('Say nothing', 'The teacher may not know if you understood. That\'s OK. You can ask afterwards.')],
       'Some questions aren\'t really questions. "Is that what you call finished?" usually means "Please do more".'),
     S('too-much-shop', ['little', 'middle', 'teen'], ['sensory', 'feelings'], 'Overwhelmed in a shop', 'You are in a busy shop. The lights, noise and people are getting too much.',
-      [O('Tell your grown-up, or show your break card', 'They can help you leave or find somewhere calmer. They\'re glad you told them.', true),
+      [O('Tell your parent, or show your break card', 'They can help you leave or find somewhere calmer. They\'re glad you told them.', true),
        O('Put on headphones or sunglasses', 'Great way to make it easier.', true),
        O('Keep going until you explode', 'Afterwards you might feel awful, and people around might feel worried. It\'s OK to ask to stop early.')]),
     S('compliment', ['middle', 'teen'], ['friends'], 'Saying something kind', 'Your friend shows you a drawing they\'re proud of. You don\'t really like it.',
@@ -263,7 +263,7 @@ window.OC_CONTENT = (function () {
     R(['little', 'middle'], ['losing'], 'After a game', 'People often say "Good game" at the end, whoever won. It means "Thanks for playing".'),
     R(['teen'], ['friends'], 'Inside jokes', 'Friends sometimes share jokes from things that happened before. It\'s fine to ask "What\'s the joke?"'),
     R(['middle', 'teen'], ['feelings'], 'Faces and feelings', 'People\'s faces show feelings, but they\'re hard to read. Asking "Are you annoyed with me?" is a good way to find out.'),
-    R(['little', 'middle', 'teen'], ['change'], 'Plans can change', 'Grown-ups sometimes change plans without warning. Asking "What happens now?" helps you get your bearings.'),
+    R(['little', 'middle', 'teen'], ['change'], 'Plans can change', 'Parents sometimes change plans without warning. Asking "What happens now?" helps you get your bearings.'),
     R(['middle', 'teen'], ['friends'], 'Saying no', 'You can say no to things you don\'t want to do. "No thanks" is a full answer.'),
     R(['teen'], ['school', 'friends'], 'You don\'t have to mask', 'Some people hide their differences to fit in, and it is exhausting. You don\'t have to. Knowing the hidden rules is just useful information. You choose what to do with it.')
   ];

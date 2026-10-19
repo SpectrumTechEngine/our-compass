@@ -100,10 +100,10 @@
     const kb = $('kidBtn');
     kb.classList.toggle('hidden', !k || V === 'setup');
     if (k) kb.innerHTML = '<b>' + face(k, 28) + '</b><span>' + esc(k.name) + '</span>' + (D.kids.length > 1 ? ' ▾' : '');
-    // Parent's phone: own side first. Child's device: no grown-ups' tab at all.
+    // Parent's phone: own side first. Child's device: no parents' tab at all.
     const items = isChild() ? [['home', '🏠', 'Home'], ['passport', '🪪', 'All about me']]
       : isParent() ? [['grown', '👪', 'Parent'], ['home', '🧒', k ? esc(k.name) + '\'s tools' : 'Child\'s tools'], ['passport', '🪪', 'All about me']]
-      : [['home', '🏠', 'Home'], ['passport', '🪪', 'All about me'], ['grown', '👪', 'Grown-ups']];
+      : [['home', '🏠', 'Home'], ['passport', '🪪', 'All about me'], ['grown', '👪', 'Parents']];
     const nav = $('nav');
     nav.innerHTML = items.map(([v, e, l]) => '<button data-a="nav" data-v="' + v + '" class="' + (v === navOf(V) ? 'on' : '') + '"><b>' + e + '</b>' + l + '</button>').join('');
     nav.classList.toggle('hidden', V === 'setup');
@@ -190,13 +190,13 @@
   function closeLayer() { layer.innerHTML = ''; scanStop(); try { speechSynthesis.cancel(); } catch (e) {} }
   function printHTML(html) { $('print').innerHTML = html; setTimeout(() => window.print(), 50); }
 
-  /* ---------- Grown-up jobs. Parent's phone: straight in. Child's device: done from the parent's phone.
+  /* ---------- Parent jobs. Parent's phone: straight in. Child's device: done from the parent's phone.
      A phone set up before the two versions keeps the old times-table sum until it's told whose it is. ---------- */
   const unlocked = () => Date.now() < lockUntil;
-  const gu = html => isChild() ? '' : html; // buttons for grown-up jobs, hidden on a child's device
+  const gu = html => isChild() ? '' : html; // buttons for parent jobs, hidden on a child's device
   function requireGrown(fn) {
     if (isParent()) { fn(); return; }
-    if (isChild()) { closeLayer(); toast('Your grown-up can do this from their phone.'); return; }
+    if (isChild()) { closeLayer(); toast('Your parent can do this from their phone.'); return; }
     if (unlocked()) { lockUntil = Date.now() + 10 * 60000; fn(); return; }
     closeLayer();
     const a = 3 + Math.floor(Math.random() * 7), b = 3 + Math.floor(Math.random() * 7);
@@ -267,7 +267,7 @@
       sw('Read it aloud', p + 'readAloud', k.readAloud, canSpeak() ? 'A 🔊 button on cards and stories' : 'Not available on this phone or in the Android app yet') +
       sw('Sounds', p + 'sounds', k.sounds, 'Gentle chime for stars and timers') +
       sw('Calmer animations', p + 'calmer', k.calmer, 'Slower, softer movement') +
-      sw('Grown-up look', p + 'grown', k.grown, 'Plainer, less playful, good for teens') +
+      sw('Teen look', p + 'grown', k.grown, 'Plainer, less playful, good for teens') +
       sw('Bigger text', p + 'big', k.big) +
       sw('Easy-read font', p + 'easy', k.easy, 'Dyslexia-friendly, with more space between letters');
   }
@@ -283,9 +283,9 @@
     const tools = orderedTools(k).filter(t => t.id !== 'checkin' || !k.tools.checkin);
     h += '<div class="grid">' + orderedTools(k).filter(t => t.id !== 'checkin').map(t => '<button class="tile" data-a="nav" data-v="' + t.id + '"><b>' + t.emoji + '</b>' + esc(toolName(t, k)) + (!simpleWords(k) ? '<small>' + esc(t.desc) + '</small>' : '') + '</button>').join('') +
       '<button class="tile" data-a="nav" data-v="passport"><b>🪪</b>All about me' + (k.age !== 'little' ? '<small>What helps me, to share</small>' : '') + '</button></div>';
-    if (!tools.length) h += '<p class="muted">All the tools are switched off. ' + (isChild() ? 'Your grown-up can switch them on from their phone.' : 'A grown-up can switch them on in Settings.') + '</p>';
+    if (!tools.length) h += '<p class="muted">All the tools are switched off. ' + (isChild() ? 'Your parent can switch them on from their phone.' : 'A parent can switch them on in Settings.') + '</p>';
     if (isParent()) h = '<p class="note">👀 This is what ' + esc(k.name) + ' sees' + (k.link ? ' on their own device' : '') + '. You can use it together, give stars and write stories here.</p>' + h;
-    if (isChild()) h += '<div class="link-note"><button class="ghost" data-a="myPic">' + face(k, 22) + ' My picture</button><button class="ghost" data-a="linkInfo">🔗 ' + (!D.link ? 'Link to a grown-up\'s phone' : D.link.lost ? 'Not linked right now' : 'Linked with your grown-up') + '</button></div>';
+    if (isChild()) h += '<div class="link-note"><button class="ghost" data-a="myPic">' + face(k, 22) + ' My picture</button><button class="ghost" data-a="linkInfo">🔗 ' + (!D.link ? 'Link to a parent\'s phone' : D.link.lost ? 'Not linked right now' : 'Linked with your parent') + '</button></div>';
     return h + '<div style="margin-top:16px">' + disclaimer + '</div>' + logo;
   };
 
@@ -304,7 +304,7 @@
       k.calm[e.c].map(i => '<button class="opt' + (e.idea === i ? ' open good' : '') + '" data-a="idea" data-v="' + esc(i) + '">' + (e.idea === i ? '✅ ' : '') + esc(i) + '</button>').join('') +
       (e.idea ? '<p class="ok">Good plan 👍</p>' : ''));
     if (k.age !== 'little' && e.c !== 'green') h += card('<h2>Where do you feel it?</h2><p class="muted">Optional. Noticing body clues early can help next time.</p>' + chipList(C.BODY_CLUES, e.body || [], 'bodyClue'));
-    if (k.age === 'little' && (e.c === 'red' || e.c === 'yellow')) h += '<p class="note">You can show this screen to a grown-up.</p>';
+    if (k.age === 'little' && (e.c === 'red' || e.c === 'yellow')) h += '<p class="note">You can show this screen to a parent.</p>';
     return backBtn('home', 'Home') + h + '<div class="row">' + (k.tools.calm ? '<button class="light" data-a="nav" data-v="calm">🫧 Calm corner</button>' : '') + (k.tools.draw ? '<button class="light" data-a="drawFor">🖍️ Draw it</button>' : '') + '<button data-a="nav" data-v="home">Done</button></div>';
   };
 
@@ -352,12 +352,12 @@
     }
     const got = r.stars.length, full = got >= r.target && r.goals.length;
     let h = backBtn('home', 'Home');
-    if (!r.goals.length) return h + card('<h2>' + esc(name) + '</h2>' + (isChild() ? '<p>No goals yet. You and your grown-up can choose some together.</p>' : '<p>No goals yet. Pick 1 to 3 goals together, then earn stars towards a treat.</p><button data-a="rEdit">Choose goals (grown-up)</button>'));
+    if (!r.goals.length) return h + card('<h2>' + esc(name) + '</h2>' + (isChild() ? '<p>No goals yet. You and your parent can choose some together.</p>' : '<p>No goals yet. Pick 1 to 3 goals together, then earn stars towards a treat.</p><button data-a="rEdit">Choose goals (parent)</button>'));
     h += card('<h2>' + esc(name) + '</h2><ul class="list">' + r.goals.map(g => '<li><span style="font-size:22px">🎯</span><span class="grow name">' + esc(g.text) + '</span><span class="muted no-grow">' + r.stars.filter(s => s.g === g.id).length + ' ⭐</span></li>').join('') + '</ul>' +
       '<div class="stars" aria-label="' + got + ' of ' + r.target + ' stars">' + Array.from({ length: r.target }, (_, i) => '<span class="' + (i < got ? 'on' : '') + '">' + (i < got ? '⭐' : '') + '</span>').join('') + '</div>' +
       '<p><b>' + got + ' of ' + r.target + '</b> stars' + (r.treat ? ' towards: <b>' + esc(r.treat) + '</b>' : '') + '</p>' +
-      (full ? '<div class="ok" style="text-align:center;font-size:1.2em">🎉 You did it! Treat time' + (r.treat ? ': ' + esc(r.treat) : '') + '!</div>' + gu('<div class="row" style="margin-top:10px"><button data-a="rNew">Start a new chart (grown-up)</button></div>')
-        : gu('<div class="row"><button data-a="addStar">⭐ Add a star (grown-up)</button></div>')) +
+      (full ? '<div class="ok" style="text-align:center;font-size:1.2em">🎉 You did it! Treat time' + (r.treat ? ': ' + esc(r.treat) : '') + '!</div>' + gu('<div class="row" style="margin-top:10px"><button data-a="rNew">Start a new chart (parent)</button></div>')
+        : gu('<div class="row"><button data-a="addStar">⭐ Add a star (parent)</button></div>')) +
       '<p class="muted" style="margin-top:10px">Stars are never taken away.' + (r.rounds.length ? ' Treats earned so far: ' + r.rounds.length + '.' : '') + '</p>' +
       gu('<button class="ghost" data-a="rEdit">Change goals or treat</button>'));
     return h;
@@ -457,7 +457,7 @@
     const row = s => '<li><span style="font-size:30px">' + esc(s.emoji || '📖') + '</span><div class="grow"><div class="name">' + esc(s.title) + '</div><div class="muted">' + esc(sleeps(s.date) || 'No date') + '</div></div><button class="small" data-a="storyOpen" data-v="' + s.id + '">Read</button></li>';
     return backBtn('home', 'Home') + card('<h2>Coming up</h2><p class="muted">Short stories about new or worrying things, so you know what to expect.</p>' +
       (up.length ? '<ul class="list">' + up.map(row).join('') + '</ul>' : '<p>Nothing coming up yet.</p>') +
-      gu('<div class="row" style="margin-top:10px"><button class="light" data-a="storyNew">✏️ Write a story (grown-up)</button></div>')) +
+      gu('<div class="row" style="margin-top:10px"><button class="light" data-a="storyNew">✏️ Write a story (parent)</button></div>')) +
       (past.length ? card('<h2>Already happened</h2><ul class="list">' + past.map(row).join('') + '</ul>') : '');
   };
   VIEWS.story = function (k) {
@@ -468,7 +468,7 @@
       '<div class="story-step">' + (last ? '🎉<br>' : '') + esc(text) + '</div><p class="muted" style="text-align:center">' + (last ? '' : 'Page ' + (n + 1) + ' of ' + s.steps.length) + '</p>' +
       '<div style="text-align:center">' + sayBtn(k, text) + '</div>' +
       '<div class="row" style="margin-top:10px"><button class="light" data-a="sPrev"' + (n ? '' : ' disabled') + '>‹ Back</button>' + (last ? '<button data-a="sPrev" data-v="restart">Read again</button>' : '<button data-a="sNext">Next ›</button>') + '</div>') +
-      gu('<div class="row"><button class="ghost no-grow" data-a="storyEdit" data-v="' + s.id + '">✏️ Change (grown-up)</button></div>');
+      gu('<div class="row"><button class="ghost no-grow" data-a="storyEdit" data-v="' + s.id + '">✏️ Change (parent)</button></div>');
   };
   VIEWS.storyEdit = function () {
     const s = ST.se;
@@ -486,7 +486,7 @@
     const list = allScenarios(k);
     return backBtn('home', 'Home') + card('<h2>What would you do?</h2><p class="muted">' + soft(k, 'Everyday moments. There are no wrong answers: tap each choice to see how other people might feel.', 'Everyday moments, with no right or wrong answers. Have a look at any choice to see how other people might feel.') + '</p><ul class="list">' +
       list.map(s => '<li><div class="grow"><div class="name">' + esc(s.title) + (s.mine ? ' <span class="tag">✏️ Ours</span>' : '') + '</div></div><button class="small light" data-a="scOpen" data-v="' + esc(s.id) + '">Open</button></li>').join('') + '</ul>' +
-      gu('<div class="row" style="margin-top:10px"><button class="light" data-a="scNew">✏️ Write your own (grown-up)</button></div>'));
+      gu('<div class="row" style="margin-top:10px"><button class="light" data-a="scNew">✏️ Write your own (parent)</button></div>'));
   };
   VIEWS.scenario = function (k) {
     const list = allScenarios(k), i = list.findIndex(s => s.id === ST.sc), s = list[i]; if (!s) return VIEWS.scenarios(k);
@@ -499,7 +499,7 @@
     });
     if (s.tip && open.length) h += '<p class="note" style="margin-top:10px">💡 ' + esc(s.tip) + '</p>';
     const next = list[(i + 1) % list.length];
-    return backBtn('scenarios', 'All moments') + card(h) + '<div class="row">' + (s.mine && !isChild() ? '<button class="light" data-a="scEdit" data-v="' + esc(s.id) + '">✏️ Change (grown-up)</button>' : '') + '<button data-a="scOpen" data-v="' + esc(next.id) + '">Next one ›</button></div>';
+    return backBtn('scenarios', 'All moments') + card(h) + '<div class="row">' + (s.mine && !isChild() ? '<button class="light" data-a="scEdit" data-v="' + esc(s.id) + '">✏️ Change (parent)</button>' : '') + '<button data-a="scOpen" data-v="' + esc(next.id) + '">Next one ›</button></div>';
   };
   VIEWS.scEdit = function () {
     const s = ST.se;
@@ -516,8 +516,8 @@
   /* ---------- Hidden rules ---------- */
   VIEWS.rules = function (k) {
     return backBtn('home', 'Home') + card('<h2>' + esc(toolName(toolById('rules'), k)) + '</h2><p class="muted">Things lots of people expect without saying. You don\'t have to follow them all. It just helps to know they\'re there.</p>') +
-      allRules(k).map(r => card('<h3 style="margin-top:0">' + esc(r.title) + (r.mine ? ' <span class="tag">✏️ Ours</span>' : '') + '</h3><p>' + esc(r.text) + '</p><div class="row">' + sayBtn(k, r.title + '. ' + r.text) + (r.mine && !isChild() ? '<button class="small light no-grow" data-a="ruleDel" data-v="' + esc(r.id) + '">Delete (grown-up)</button>' : '') + '</div>')).join('') +
-      gu('<div class="row"><button class="light" data-a="ruleNew">✏️ Write your own (grown-up)</button></div>');
+      allRules(k).map(r => card('<h3 style="margin-top:0">' + esc(r.title) + (r.mine ? ' <span class="tag">✏️ Ours</span>' : '') + '</h3><p>' + esc(r.text) + '</p><div class="row">' + sayBtn(k, r.title + '. ' + r.text) + (r.mine && !isChild() ? '<button class="small light no-grow" data-a="ruleDel" data-v="' + esc(r.id) + '">Delete (parent)</button>' : '') + '</div>')).join('') +
+      gu('<div class="row"><button class="light" data-a="ruleNew">✏️ Write your own (parent)</button></div>');
   };
   VIEWS.ruleEdit = function () {
     return backBtn('rules', 'Cancel') + card('<h2>Write a hidden rule</h2><label class="lab">Title</label><input type="text" maxlength="60" data-f="s.se.title" placeholder="e.g. At Granny\'s house">' +
@@ -538,7 +538,7 @@
   /* ---------- My wins ---------- */
   VIEWS.wins = function (k) {
     const wins = k.diary.filter(e => e.type === 'good' && !e.hideKid).slice(0, 60);
-    return backBtn('home', 'Home') + card('<h2>🏆 My wins</h2><p class="muted">Good moments to remember. ' + (isChild() && D.link ? 'Your grown-up sees the ones you add, and can add some too.' : 'Grown-ups can add them too.') + '</p><div class="row"><input type="text" maxlength="120" data-f="s.win" placeholder="Something that went well"><button class="no-grow" data-a="addWin">Add</button></div>') +
+    return backBtn('home', 'Home') + card('<h2>🏆 My wins</h2><p class="muted">Good moments to remember. ' + (isChild() && D.link ? 'Your parent sees the ones you add, and can add some too.' : 'Parents can add them too.') + '</p><div class="row"><input type="text" maxlength="120" data-f="s.win" placeholder="Something that went well"><button class="no-grow" data-a="addWin">Add</button></div>') +
       (wins.length ? wins.map(e => card('<div class="row"><span class="no-grow" style="font-size:26px">⭐</span><div><div class="name"><b>' + esc([].concat(e.good || []).join(', ') || e.what || e.note) + '</b></div>' +
         ((e.good || []).length && (e.note || e.what) ? '<p>' + esc(e.note || e.what) + '</p>' : '') + '<p class="muted">' + esc(day(e.t)) + '</p></div></div>')).join('') : '<p class="muted">No wins saved yet. They\'ll show up here.</p>');
   };
@@ -650,7 +650,7 @@
 
   /* =====================================================================
      LINKED DEVICES: what each side shares, scrambled by sync.js before it leaves the phone.
-     Parent to child (box "p"): the child's settings and everything a grown-up makes for them.
+     Parent to child (box "p"): the child's settings and everything a parent makes for them.
      Child to parent (box "c"): check-ins, social battery and wins they add (plus All about me and
      their picture if they change them). The diary, notes and drawings are never in either box.
      ===================================================================== */
@@ -782,8 +782,8 @@
 
   /* ---------- Child's device: scan or type the code ---------- */
   VIEWS.linkMe = function (k, inSetup) {
-    return card('<h2>🔗 Link to a grown-up\'s phone</h2>' +
-      '<p>On the grown-up\'s phone, open Our Compass, go to <b>📱 Devices</b> and tap <b>Link a device</b>. A code shows up there.</p>' +
+    return card('<h2>🔗 Link to a parent\'s phone</h2>' +
+      '<p>On the parent\'s phone, open Our Compass, go to <b>📱 Devices</b> and tap <b>Link a device</b>. A code shows up there.</p>' +
       '<div class="row" style="margin-top:10px"><button data-a="scan">📷 Scan the code</button></div>' +
       '<label class="lab" for="codeIn">Or type the 8 letters</label><form id="codeForm" class="row" autocomplete="off"><input id="codeIn" class="code-in" type="text" maxlength="9" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="ABCD EFGH"><button class="no-grow" type="submit">Link</button></form>' +
       '<p id="linkMsg" class="muted" role="status"></p>' +
@@ -793,7 +793,7 @@
   let scanS = null;
   function scanStop() { if (scanS) { scanS.getTracks().forEach(t => t.stop()); scanS = null; } }
   async function scan() {
-    sheet('<h2>📷 Scan the code</h2><video id="scanV" class="scan" playsinline muted autoplay></video><p id="scanMsg" class="muted" role="status" style="text-align:center">Point the camera at the code on the grown-up\'s phone.</p><button class="light" data-a="closeLayer" style="width:100%">Cancel</button>');
+    sheet('<h2>📷 Scan the code</h2><video id="scanV" class="scan" playsinline muted autoplay></video><p id="scanMsg" class="muted" role="status" style="text-align:center">Point the camera at the code on the parent\'s phone.</p><button class="light" data-a="closeLayer" style="width:100%">Cancel</button>');
     const msg = t => { const m = $('scanMsg'); if (m) m.textContent = t; };
     try { scanS = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); }
     catch (e) { msg('The camera didn\'t open. You can type the letters instead.'); return; }
@@ -812,7 +812,7 @@
       } catch (e) {}
       const m = /#link=([A-Za-z0-9_-]{40,})\.([a-z0-9]+)(?:\.([A-Z0-9]+))?/.exec(text);
       if (m) { scanStop(); closeLayer(); linkWith(m[1], m[2], m[3] || ''); return; }
-      if (text) msg('That isn\'t an Our Compass code. Try the one on the grown-up\'s phone.');
+      if (text) msg('That isn\'t an Our Compass code. Try the one on the parent\'s phone.');
       setTimeout(tick, 250);
     };
     tick();
@@ -820,11 +820,11 @@
   const linkMsg = t => { const m = $('linkMsg'); if (m) m.textContent = t; else toast(t); };
   async function linkCode(raw) {
     const code = OS.cleanCode(raw);
-    if (code.length !== 8) return linkMsg('The code is 8 letters. Have another look at the grown-up\'s phone.');
+    if (code.length !== 8) return linkMsg('The code is 8 letters. Have another look at the parent\'s phone.');
     linkMsg('Linking…');
     try {
       const info = await OS.claim(code);
-      if (!info) return linkMsg('That code didn\'t work. Codes last 15 minutes, so the grown-up can make a new one.');
+      if (!info) return linkMsg('That code didn\'t work. Codes last 15 minutes, so the parent can make a new one.');
       linkWith(info.key, info.kid, code);
     } catch (e) { if (LOCALHOST) console.warn(e); linkMsg('Couldn\'t link just now. Linking needs the internet. Please try again.'); }
   }
@@ -845,7 +845,7 @@
     fromParent(b);
     SY.sent = {}; save(); syncStart();
     used('linked-child-device'); V = 'home'; render(); window.scrollTo(0, 0);
-    toast('🔗 Linked with your grown-up\'s phone.');
+    toast('🔗 Linked with your parent\'s phone.');
   }
   // A code scanned with the phone's own camera opens the website with the key after "#" (never sent to a server)
   function linkFromAddress() {
@@ -854,23 +854,23 @@
     setTimeout(() => linkWith(m[1], m[2], m[3] || ''), 300);
   }
 
-  /* ---------- Grown-ups' lock screen ---------- */
+  /* ---------- Parents' lock screen ---------- */
   VIEWS.lock = function () {
     const [a, b] = ST.sum || [7, 6];
-    return card('<h2>🔒 Grown-ups only</h2><p>To open, answer: <b style="font-size:1.3em">' + a + ' × ' + b + '</b></p>' +
+    return card('<h2>🔒 Parents only</h2><p>To open, answer: <b style="font-size:1.3em">' + a + ' × ' + b + '</b></p>' +
       '<form id="lockForm" class="row" autocomplete="off"><input id="lockIn" type="text" inputmode="numeric" maxlength="3" aria-label="Answer"><button class="no-grow" type="submit">Open</button></form><p id="lockMsg" class="muted" role="status"></p>' +
       '<p class="muted">Not a password: just enough to stop little fingers.</p>') +
       '<div class="row">' + (K().plan.length ? '<button class="light" data-a="crisis">🆘 It\'s too much right now</button>' : '') + '<button class="light" data-a="nav" data-v="home">Back to ' + esc(K().name) + '\'s side</button></div>';
   };
 
-  /* ---------- Grown-ups' area ---------- */
+  /* ---------- Parents' area ---------- */
   const PTABS = [['child', '🧒 From'], ['diary', '📝 Diary'], ['patterns', '🔍 Patterns'], ['summary', '📄 Summary'], ['plan', '🆘 Too-much plan'], ['devices', '📱 Devices'], ['settings', '⚙️ Settings']];
   VIEWS.grown = function (k) {
     if (isChild()) { setTimeout(() => go('home'), 0); return ''; }
     if (!isParent() && !unlocked()) { setTimeout(() => requireGrown(() => go('grown', true)), 0); return ''; }
     const t = ST.ptab || 'child';
     return (isParent() ? '' : whoseCard()) +
-      '<div class="row" style="margin-bottom:10px"><b class="no-grow">👪 ' + (isParent() ? '' : 'Grown-ups: ') + esc(k.emoji + ' ' + k.name) + '</b><span></span>' + (k.plan.length ? '<button class="small light no-grow" data-a="crisis">🆘 Too much now</button>' : '') + (isParent() ? '' : '<button class="small light no-grow" data-a="lockNow" aria-label="Lock">🔒</button>') + '</div>' +
+      '<div class="row" style="margin-bottom:10px"><b class="no-grow">👪 ' + (isParent() ? '' : 'Parent: ') + esc(k.emoji + ' ' + k.name) + '</b><span></span>' + (k.plan.length ? '<button class="small light no-grow" data-a="crisis">🆘 Too much now</button>' : '') + (isParent() ? '' : '<button class="small light no-grow" data-a="lockNow" aria-label="Lock">🔒</button>') + '</div>' +
       '<div class="tabs" role="tablist">' + PTABS.map(([id, l]) => '<button role="tab" aria-selected="' + (t === id) + '" class="' + (t === id ? 'on' : '') + '" data-a="ptab" data-v="' + id + '">' + l + (id === 'child' ? ' ' + esc(k.name) : '') + '</button>').join('') + '</div>' +
       ({ child: gChild, diary: gDiary, patterns: gPatterns, summary: gSummary, plan: gPlan, devices: gDevices, settings: gSettings }[t])(k);
   };
@@ -894,7 +894,7 @@
       '<li><b>From ' + esc(k.name) + '\'s device</b> (see the 🧒 From ' + esc(k.name) + ' tab): check-ins, social battery, and wins they add. If they change All about me or their picture, that comes back too.</li>' +
       '<li><b>Never shared:</b> your diary, patterns and summary, and ' + esc(k.name) + '\'s private notes and drawings.</li></ul>' +
       '<p class="ok">🔒 Everything shared is scrambled (encrypted) on the phone before it\'s sent. Only your linked devices have the key, so nobody else can read it, not even us.</p>' +
-      '<p class="muted">Changes show up on the other device within a few seconds when both are online. Their device has no grown-ups\' area and no settings: you change things from here.</p>');
+      '<p class="muted">Changes show up on the other device within a few seconds when both are online. Their device has no parent\'s side and no settings: you change things from here.</p>');
     return h;
   }
 
@@ -1067,7 +1067,7 @@
   }
 
   /* Too-much plan */
-  // Optional: nothing is added unless a grown-up chooses to make a plan
+  // Optional: nothing is added unless a parent chooses to make a plan
   function gPlan(k) {
     if (!k.planOn) return card('<h2>🆘 When it gets too much (optional)</h2><p>Some families like a short, calm, step-by-step card to follow when things get too much, one step at a time. Others don\'t need one. It\'s entirely up to you.</p>' +
       '<p class="muted">If you make one, you can choose to include it in "All about me" and the summary. Nothing is added unless you choose to.</p>' +
@@ -1102,7 +1102,7 @@
       '<div class="row"><button class="light" data-a="backup">Save backup</button><button class="light" data-a="restore">Load backup</button></div><input type="file" id="restoreIn" accept=".json,application/json" class="hidden"><p id="backupMsg" class="muted" role="status"></p>');
     h += card('<h2>💬 Is this useful?</h2><p class="muted">Tell the maker what helps, what doesn\'t, or what\'s missing. Please don\'t include your child\'s name.</p><button class="light" data-a="feedback">Send feedback</button>');
     h += card('<h2>About</h2>' + disclaimer + '<p><a href="privacy.html">Privacy: what stays on this phone, and what linked devices share</a></p>' +
-      '<div class="row" style="margin-top:10px">' + (isParent() ? '' : '<button class="light" data-a="lockNow">🔒 Lock the grown-ups\' area</button>') + '<button class="light" data-a="delKid" style="color:#a2453d">Remove ' + esc(k.name) + '</button></div>');
+      '<div class="row" style="margin-top:10px">' + (isParent() ? '' : '<button class="light" data-a="lockNow">🔒 Lock the parent\'s side</button>') + '<button class="light" data-a="delKid" style="color:#a2453d">Remove ' + esc(k.name) + '</button></div>');
     return h + logo;
   }
 
@@ -1114,7 +1114,7 @@
     kids: () => {
       if (isChild()) return ACT.myPic();
       sheet('<h2>Who\'s using it?</h2><ul class="list">' + D.kids.map(x => '<li><span style="font-size:30px">' + face(x, 36) + '</span><span class="grow name">' + esc(x.name) + '</span>' + (x.id === D.cur ? '<span class="tag">Now</span>' : '<button class="small" data-a="switchKid" data-v="' + x.id + '">Switch</button>') + '</li>').join('') + '</ul>' +
-        '<div class="row" style="margin-top:10px"><button class="light" data-a="addKid">+ Add a child (grown-up)</button></div>');
+        '<div class="row" style="margin-top:10px"><button class="light" data-a="addKid">+ Add a child (parent)</button></div>');
     },
     switchKid: v => { D.cur = v; save(); closeLayer(); ST = { ptab: ST.ptab }; render(); toast('Showing ' + K().name); },
     addKid: () => requireGrown(() => { closeLayer(); W = { step: 1, kid: newKid(), adding: true }; render(); }),
@@ -1147,8 +1147,8 @@
     },
     linkInfo: () => {
       const L = D.link;
-      sheet('<h2>🔗 ' + (!L ? 'Not linked yet' : L.lost ? 'Not linked right now' : 'Linked with your grown-up') + '</h2>' +
-        (L && !L.lost ? '<p>Your check-ins, social battery and wins go to your grown-up\'s phone. Your tools and stories come from there.' + (L.seen ? ' Last update: ' + esc(day(L.seen) + ', ' + time(L.seen)) + '.' : '') + '</p>' : '<p>Your grown-up can link this device from their phone.</p>') +
+      sheet('<h2>🔗 ' + (!L ? 'Not linked yet' : L.lost ? 'Not linked right now' : 'Linked with your parent') + '</h2>' +
+        (L && !L.lost ? '<p>Your check-ins, social battery and wins go to your parent\'s phone. Your tools and stories come from there.' + (L.seen ? ' Last update: ' + esc(day(L.seen) + ', ' + time(L.seen)) + '.' : '') + '</p>' : '<p>Your parent can link this device from their phone.</p>') +
         '<p class="ok">📓 Your notes and drawings stay on this device. They\'re never sent anywhere.</p>' +
         '<p class="muted">Everything that\'s shared is scrambled first, so only your family\'s linked devices can read it.</p>' +
         '<div class="row"><button class="light" data-a="relink">' + (L ? 'Link again' : 'Link now') + '</button><button data-a="closeLayer">Close</button></div>');
@@ -1328,8 +1328,8 @@
     cStep: v => { ST.cstep = Math.max(0, (ST.cstep || 0) + +v); crisis(K()); },
     crisisClose: () => closeLayer(),
 
-    /* grown-ups */
-    lockNow: () => { lockUntil = 0; go('home'); toast('Grown-ups\' area locked.'); },
+    /* parents */
+    lockNow: () => { lockUntil = 0; go('home'); toast('Parents\' area locked.'); },
     ptab: v => { ST = { ptab: v }; lockUntil = Date.now() + 10 * 60000; render(); window.scrollTo(0, 0); },
     dFilter: v => { ST.filter = v; render(); },
     moreCi: () => { ST.moreCi = (ST.moreCi || 15) + 30; render(); },
