@@ -1129,6 +1129,8 @@
     h += card('<h2>💬 Is this useful?</h2><p class="muted">Tell the maker what helps, what doesn\'t, or what\'s missing. Please don\'t include your child\'s name.</p><button class="light" data-a="feedback">Send feedback</button>');
     h += card('<h2>About</h2>' + disclaimer + '<p><a href="privacy.html">Privacy: what stays on this phone, and what linked devices share</a></p>' +
       '<div class="row" style="margin-top:10px">' + (isParent() ? '' : '<button class="light" data-a="lockNow">🔒 Lock the parent\'s side</button>') + '<button class="light" data-a="delKid" style="color:#a2453d">Remove ' + esc(k.name) + '</button></div>');
+    h += card('<h2>🗑️ Delete everything and start over</h2><p class="muted">There\'s no account to close: everything lives on this phone, plus the scrambled copies shared with linked devices. This deletes all of it.</p>' +
+      '<button class="light" data-a="wipeAsk" style="color:#a2453d">Delete everything…</button>');
     return h + logo;
   }
 
@@ -1407,6 +1409,27 @@
     kHard: v => { const k = K(); k.hard = k.hard.includes(v) ? k.hard.filter(x => x !== v) : k.hard.concat(v); save(); render(); },
     toolsDefault: () => { const k = K(); k.tools = defaultTools(k.age); save(); render(); },
     feedback: () => { if (window.STE && window.STE.feedback) { used('feedback-opened'); window.STE.feedback(); } else toast('Feedback needs the internet. Please try again later.'); },
+    // Delete everything and start over (parent's phone)
+    wipeAsk: () => {
+      const linked = D.kids.filter(k => k.link).map(k => k.name);
+      sheet('<h2>🗑️ Delete everything?</h2><p>This deletes, from this phone: ' + esc(D.kids.map(k => k.name).join(', ')) + ', the diary, patterns, stories, star charts, All about me, and every setting.</p>' +
+        (linked.length ? '<p>It also unlinks ' + esc(linked.join(' and ')) + '\'s device' + (linked.length > 1 ? 's' : '') + ' and deletes the scrambled shared copies. Their device keeps what it has now, but nothing more is shared.</p>' : '') +
+        '<p><b>This can\'t be undone.</b> If you might want it back, save a backup first.</p>' +
+        '<div class="row"><button class="light" data-a="backup">Save backup</button></div><p id="backupMsg" class="muted" role="status"></p>' +
+        '<div class="row" style="margin-top:10px"><button class="light" data-a="closeLayer">Cancel</button><button data-a="wipeAll" style="background:#a2453d">Delete everything</button></div>');
+    },
+    wipeAll: async () => {
+      if (!confirm('Last check: delete everything on this phone and start over?')) return;
+      sheet('<h2>Deleting…</h2><p class="muted">Removing the shared copies, then this phone\'s data.</p>');
+      syncStop(); clearTimeout(SY.timer);
+      for (const k of D.kids.filter(x => x.link)) { try { await OS.remove(k.link.key, 'p'); await OS.remove(k.link.key, 'c'); } catch (e) {} }
+      if (SY.pairing) OS.cancelOffer(SY.pairing.code);
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      used('wiped');
+      D = load(); SY.sent = {}; SY.pairing = null; SY.err = ''; ST = {}; W = null; lockUntil = 0;
+      closeLayer(); V = 'setup'; render(); window.scrollTo(0, 0);
+      toast('Everything is deleted. You can start again whenever you like.');
+    },
     delKid: () => {
       const k = K();
       if (!confirm('Remove ' + k.name + ' and all their diary entries, check-ins and notes from this phone? This can\'t be undone. Save a backup first if you\'re not sure.')) return;
