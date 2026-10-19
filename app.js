@@ -668,7 +668,9 @@
     const kid = { id: k.id }; KID_SHARED.forEach(f => { kid[f] = k[f]; });
     kid.emoji = k.emoji; kid.photo = k.photo; kid.photoAt = k.photoAt; kid.passport = k.passport;
     const wins = k.diary.filter(e => e.type === 'good' && !e.hideKid && e.by !== 'child').slice(0, 100).map(e => ({ id: e.id, t: e.t, good: e.good || [], note: e.note || e.what || '' }));
-    return { v: 1, kid, wins };
+    // A timer the parent started for this child shows on their device too
+    const T = D.timer && D.timer.kid === k.id && D.timer.id ? { id: D.timer.id, end: D.timer.end, total: D.timer.total, label: D.timer.label } : null;
+    return { v: 1, kid, wins, timer: T };
   }
   function childBox(k) {
     return { v: 1, checkins: k.checkins.slice(0, 400), battery: k.battery.slice(0, 400), wins: k.diary.filter(e => e.by === 'child').slice(0, 200),
@@ -686,6 +688,10 @@
     takeNewer(k, b.kid);
     k.diary = k.diary.filter(e => e.by === 'child').concat((b.wins || []).map(w => Object.assign({ type: 'good', from: 'p', ticks: [] }, w))).sort((x, y) => y.t - x.t);
     fixKid(k);
+    // The parent's timer: only if the Timer tool is on for them, they haven't stopped it, and they aren't running their own
+    const T = b.timer && k.tools.timer && b.timer.id !== D.timerDone ? b.timer : null, mine = D.timer;
+    if (T && (!mine || mine.from === 'p')) { if (!mine || mine.id !== T.id || mine.end !== T.end) D.timer = Object.assign({}, T, { from: 'p', rang: false }); }
+    else if (!T && mine && mine.from === 'p') D.timer = null;
     if (D.link) { D.link.lost = false; D.link.seen = Date.now(); }
     save(); safeRender();
   }
@@ -884,7 +890,7 @@
       '<div class="row" style="margin-top:10px"><button data-a="pairStart">' + (L ? '+ Link another device (e.g. their tablet)' : '🔗 Link a device') + '</button>' + (L ? '<button class="light no-grow" data-a="unlink">Unlink</button>' : '') + '</div>' +
       (P ? '<p class="muted">The linking code is still open. <button class="small light" data-a="pairStart" data-v="again">Show it again</button></p>' : ''));
     h += card('<h2>What\'s shared</h2><ul>' +
-      '<li><b>To ' + esc(k.name) + '\'s device:</b> their tools, theme and look, star chart, Coming up stories, your own moments and hidden rules, All about me, calm ideas, the too-much plan if you make one, and good moments you choose to show in "My wins".</li>' +
+      '<li><b>To ' + esc(k.name) + '\'s device:</b> their tools, theme and look, star chart, Coming up stories, your own moments and hidden rules, All about me, calm ideas, the too-much plan if you make one, timers you start for them (if their Timer tool is on), and good moments you choose to show in "My wins".</li>' +
       '<li><b>From ' + esc(k.name) + '\'s device</b> (see the 🧒 From ' + esc(k.name) + ' tab): check-ins, social battery, and wins they add. If they change All about me or their picture, that comes back too.</li>' +
       '<li><b>Never shared:</b> your diary, patterns and summary, and ' + esc(k.name) + '\'s private notes and drawings.</li></ul>' +
       '<p class="ok">🔒 Everything shared is scrambled (encrypted) on the phone before it\'s sent. Only your linked devices have the key, so nobody else can read it, not even us.</p>' +
@@ -1212,9 +1218,9 @@
 
     /* timer */
     tLabel: v => { ST.tLabel = v; render(); },
-    tStart: v => { const m = +v, label = (ST.tLabel || C.TIMER_FOR[0]).trim() || 'the next thing'; D.timer = { end: Date.now() + m * 60000, total: m * 60000, label, rang: false }; save(); used('timer-started'); render(); },
+    tStart: v => { const m = +v, label = (ST.tLabel || C.TIMER_FOR[0]).trim() || 'the next thing'; D.timer = { id: uid(), kid: K().id, end: Date.now() + m * 60000, total: m * 60000, label, rang: false }; save(); used('timer-started'); render(); },
     tAdd: () => { if (!D.timer) return; D.timer.end += 60000; D.timer.total += 60000; save(); render(); },
-    tStop: () => { D.timer = null; save(); render(); },
+    tStop: () => { if (D.timer && D.timer.from === 'p') D.timerDone = D.timer.id; D.timer = null; save(); render(); }, // a parent's timer the child stopped doesn't come back
 
     /* today list */
     tdTick: v => { const t = K().today, i = +v; t.done = t.done.includes(i) ? t.done.filter(x => x !== i) : t.done.concat(i); save(); render(); if (t.done.length === t.items.length) chime(); },
