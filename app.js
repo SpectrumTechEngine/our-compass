@@ -34,7 +34,7 @@
       id: uid(), name: name || '', emoji: emoji || '🦊', age, theme: 'plain', hard: [], tools: defaultTools(age),
       readAloud: false, sounds: true, calmer: false, grown: age === 'teen', big: false, easy: false, pda: false, simple: false, photo: '', photoAt: 0,
       link: null, gone: [],
-      calm: clone(C.CALM_IDEAS), plan: clone(C.PLAN_STEPS), cards: [],
+      calm: clone(C.CALM_IDEAS), plan: [], planOn: false, cards: [],
       checkins: [], battery: [], diary: [], notes: [], stories: [], drawings: [],
       reward: { goals: [], target: 10, treat: '', stars: [], rounds: [] },
       ft: { first: null, then: null, firstDone: false },
@@ -56,6 +56,7 @@
     try {
       const v = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (v && Array.isArray(v.kids)) {
+        v.kids.forEach(k => { if (k && k.planOn === undefined) { k.planOn = Array.isArray(k.plan) && k.plan.length > 0 && JSON.stringify(k.plan) !== JSON.stringify(C.PLAN_STEPS); if (!k.planOn) k.plan = []; } });
         v.kids = v.kids.filter(k => k && k.id).map(fixKid); v.pro = v.pro || ''; v.timer = v.timer || null;
         // role: 'parent', 'child', or '' for a phone set up before the two versions (it keeps the old sum lock until asked)
         if (typeof v.role !== 'string') v.role = '';
@@ -235,7 +236,7 @@
     if (w.step === 0) return card('<h2>👋 Welcome to Our Compass</h2><p class="hello" style="font-size:1.15em">You know your child best. This is here to help.</p>' +
       '<p>Our Compass is a free, private toolkit for autistic children and their families:</p><ul>' +
       '<li><b>For your child:</b> a colour check-in, calm corner, first/then board, timer, quick cards, everyday "what would you do?" moments, and more.</li>' +
-      '<li><b>For you:</b> a diary of tricky and good moments, patterns to spot, a calm plan for when it gets too much, and a summary to print or share.</li>' +
+      '<li><b>For you:</b> a diary of tricky and good moments, patterns to spot, a summary to print or share, and, only if you want one, a calm plan for when things get too much.</li>' +
       '<li><b>Together:</b> an "All about me" passport to share with school or grandparents.</li></ul>' +
       '<p class="ok">🔒 Private. No accounts. Your diary stays on your phone. If your child has their own phone or tablet, you can link it: their side is scrambled before it leaves the phone, so only your family\'s linked devices can read it.</p>' + disclaimer) +
       card('<h2>Whose device is this?</h2><div class="grid" style="grid-template-columns:1fr 1fr">' +
@@ -284,7 +285,7 @@
       '<button class="tile" data-a="nav" data-v="passport"><b>🪪</b>All about me' + (k.age !== 'little' ? '<small>What helps me, to share</small>' : '') + '</button></div>';
     if (!tools.length) h += '<p class="muted">All the tools are switched off. ' + (isChild() ? 'Your grown-up can switch them on from their phone.' : 'A grown-up can switch them on in Settings.') + '</p>';
     if (isParent()) h = '<p class="note">👀 This is what ' + esc(k.name) + ' sees' + (k.link ? ' on their own device' : '') + '. You can use it together, give stars and write stories here.</p>' + h;
-    if (isChild()) h += '<div class="link-note"><button class="ghost" data-a="linkInfo">🔗 ' + (!D.link ? 'Link to a grown-up\'s phone' : D.link.lost ? 'Not linked right now' : 'Linked with your grown-up') + '</button></div>';
+    if (isChild()) h += '<div class="link-note"><button class="ghost" data-a="myPic">' + face(k, 22) + ' My picture</button><button class="ghost" data-a="linkInfo">🔗 ' + (!D.link ? 'Link to a grown-up\'s phone' : D.link.lost ? 'Not linked right now' : 'Linked with your grown-up') + '</button></div>';
     return h + '<div style="margin-top:16px">' + disclaimer + '</div>' + logo;
   };
 
@@ -595,7 +596,7 @@
       PASS.map(([id, l]) => '<label class="lab">' + esc(l) + '</label><textarea maxlength="600" data-f="k.passport.' + id + '" placeholder="' + esc(PASS_HINT[id]) + '">' + esc(p[id]) + '</textarea>').join('') +
       '<h3>My senses</h3>' + C.SENSES.map(([id, e, l]) => '<label class="lab">' + e + ' ' + esc(l) + '</label><div class="row"><select data-f="k.passport.sense.' + id + '" class="no-grow" style="width:auto">' + C.SENSE_LEVELS.map(([v, t]) => '<option value="' + v + '"' + ((p.sense[id] || '') === v ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>' +
         '<input type="text" maxlength="120" data-f="k.passport.senseNote.' + id + '" value="' + esc(p.senseNote[id] || '') + '" placeholder="Notes"></div>').join('') +
-      '<label class="chk" style="margin-top:14px"><input type="checkbox" data-f="k.passport.showPlan"' + (p.showPlan ? ' checked' : '') + '> Include "When it gets too much" (the calm plan from the grown-ups\' area)</label>' +
+      (k.plan.length ? '<label class="chk" style="margin-top:14px"><input type="checkbox" data-f="k.passport.showPlan"' + (p.showPlan ? ' checked' : '') + '> Include "When it gets too much" (the calm plan from the parent\'s side)</label>' : '') +
       '<div class="row" style="margin-top:12px"><button data-a="pDone">Done</button></div>');
     const filled = PASS.some(([id]) => p[id].trim()) || Object.values(p.sense).some(Boolean);
     let h = card(passportHtml(k, true) + (filled ? '' : '<p class="muted">Nothing filled in yet.</p>') + '<div class="row" style="margin-top:12px"><button data-a="pEdit">✏️ Fill in / change</button></div>');
@@ -641,7 +642,7 @@
 
   /* ---------- "When it gets too much" calm card (no lock: it's needed fast) ---------- */
   function crisis(k) {
-    const steps = k.plan.length ? k.plan : C.PLAN_STEPS, n = Math.min(ST.cstep || 0, steps.length - 1);
+    const steps = k.plan.length ? k.plan : ['Stay close and stay calm.'], n = Math.min(ST.cstep || 0, steps.length - 1);
     layer.innerHTML = '<div class="crisis"><div class="row"><span class="muted no-grow" style="color:#b9c4c9">Step ' + (n + 1) + ' of ' + steps.length + '</span><button class="light no-grow" data-a="crisisClose" style="margin-left:auto">Close</button></div>' +
       '<div class="step">' + esc(steps[n]) + '</div><p style="text-align:center;color:#b9c4c9">Breathe slowly yourself too.</p>' +
       '<div class="row"><button class="light" data-a="cStep" data-v="-1"' + (n ? '' : ' disabled') + '>‹ Back</button><button data-a="cStep" data-v="1" style="background:#5b7d8a"' + (n >= steps.length - 1 ? ' disabled' : '') + '>Next ›</button></div></div>';
@@ -655,7 +656,7 @@
      ===================================================================== */
   const OS = window.OC_SYNC;
   const SY = { stops: [], timer: null, sent: {}, gotC: false, err: '', pairing: null };
-  const KID_SHARED = ['name', 'emoji', 'age', 'theme', 'hard', 'tools', 'readAloud', 'sounds', 'calmer', 'grown', 'big', 'easy', 'pda', 'simple', 'calm', 'plan', 'reward', 'stories', 'custom'];
+  const KID_SHARED = ['name', 'age', 'theme', 'hard', 'tools', 'readAloud', 'sounds', 'calmer', 'grown', 'big', 'easy', 'pda', 'simple', 'calm', 'plan', 'planOn', 'reward', 'stories', 'custom'];
   const fresh = x => x.u || x.t || 0;
   // Joins two lists, keeping the newer copy of anything in both
   function joinList(a, b, key) {
@@ -665,17 +666,17 @@
   }
   function parentBox(k) {
     const kid = { id: k.id }; KID_SHARED.forEach(f => { kid[f] = k[f]; });
-    kid.photo = k.photo; kid.photoAt = k.photoAt; kid.passport = k.passport;
+    kid.emoji = k.emoji; kid.photo = k.photo; kid.photoAt = k.photoAt; kid.passport = k.passport;
     const wins = k.diary.filter(e => e.type === 'good' && !e.hideKid && e.by !== 'child').slice(0, 100).map(e => ({ id: e.id, t: e.t, good: e.good || [], note: e.note || e.what || '' }));
     return { v: 1, kid, wins };
   }
   function childBox(k) {
     return { v: 1, checkins: k.checkins.slice(0, 400), battery: k.battery.slice(0, 400), wins: k.diary.filter(e => e.by === 'child').slice(0, 200),
-      photo: k.photo, photoAt: k.photoAt, passport: k.passport, hi: (D.link && D.link.hi) || '' };
+      emoji: k.emoji, photo: k.photo, photoAt: k.photoAt, passport: k.passport, hi: (D.link && D.link.hi) || '' };
   }
   // Picture and All about me can be changed on either side: the newest change wins
   function takeNewer(k, b) {
-    if (b.photoAt > (k.photoAt || 0)) { k.photo = b.photo || ''; k.photoAt = b.photoAt; }
+    if (b.photoAt > (k.photoAt || 0)) { k.photo = b.photo || ''; if (b.emoji) k.emoji = b.emoji; k.photoAt = b.photoAt; }
     if (b.passport && (b.passport.at || 0) > (k.passport.at || 0)) k.passport = b.passport;
   }
   // On the child's device: the parent's box arrives
@@ -853,19 +854,19 @@
     return card('<h2>🔒 Grown-ups only</h2><p>To open, answer: <b style="font-size:1.3em">' + a + ' × ' + b + '</b></p>' +
       '<form id="lockForm" class="row" autocomplete="off"><input id="lockIn" type="text" inputmode="numeric" maxlength="3" aria-label="Answer"><button class="no-grow" type="submit">Open</button></form><p id="lockMsg" class="muted" role="status"></p>' +
       '<p class="muted">Not a password: just enough to stop little fingers.</p>') +
-      '<div class="row"><button class="light" data-a="crisis">🆘 It\'s too much right now</button><button class="light" data-a="nav" data-v="home">Back to ' + esc(K().name) + '\'s side</button></div>';
+      '<div class="row">' + (K().plan.length ? '<button class="light" data-a="crisis">🆘 It\'s too much right now</button>' : '') + '<button class="light" data-a="nav" data-v="home">Back to ' + esc(K().name) + '\'s side</button></div>';
   };
 
   /* ---------- Grown-ups' area ---------- */
-  const PTABS = [['diary', '📝 Diary'], ['patterns', '🔍 Patterns'], ['summary', '📄 Summary'], ['plan', '🆘 Too-much plan'], ['devices', '📱 Devices'], ['settings', '⚙️ Settings']];
+  const PTABS = [['child', '🧒 From'], ['diary', '📝 Diary'], ['patterns', '🔍 Patterns'], ['summary', '📄 Summary'], ['plan', '🆘 Too-much plan'], ['devices', '📱 Devices'], ['settings', '⚙️ Settings']];
   VIEWS.grown = function (k) {
     if (isChild()) { setTimeout(() => go('home'), 0); return ''; }
     if (!isParent() && !unlocked()) { setTimeout(() => requireGrown(() => go('grown', true)), 0); return ''; }
-    const t = ST.ptab || 'diary';
+    const t = ST.ptab || 'child';
     return (isParent() ? '' : whoseCard()) +
-      '<div class="row" style="margin-bottom:10px"><b class="no-grow">👪 ' + (isParent() ? '' : 'Grown-ups: ') + esc(k.emoji + ' ' + k.name) + '</b><span></span><button class="small light no-grow" data-a="crisis">🆘 Too much now</button>' + (isParent() ? '' : '<button class="small light no-grow" data-a="lockNow" aria-label="Lock">🔒</button>') + '</div>' +
-      '<div class="tabs" role="tablist">' + PTABS.map(([id, l]) => '<button role="tab" aria-selected="' + (t === id) + '" class="' + (t === id ? 'on' : '') + '" data-a="ptab" data-v="' + id + '">' + l + '</button>').join('') + '</div>' +
-      ({ diary: gDiary, patterns: gPatterns, summary: gSummary, plan: gPlan, devices: gDevices, settings: gSettings }[t])(k);
+      '<div class="row" style="margin-bottom:10px"><b class="no-grow">👪 ' + (isParent() ? '' : 'Grown-ups: ') + esc(k.emoji + ' ' + k.name) + '</b><span></span>' + (k.plan.length ? '<button class="small light no-grow" data-a="crisis">🆘 Too much now</button>' : '') + (isParent() ? '' : '<button class="small light no-grow" data-a="lockNow" aria-label="Lock">🔒</button>') + '</div>' +
+      '<div class="tabs" role="tablist">' + PTABS.map(([id, l]) => '<button role="tab" aria-selected="' + (t === id) + '" class="' + (t === id ? 'on' : '') + '" data-a="ptab" data-v="' + id + '">' + l + (id === 'child' ? ' ' + esc(k.name) : '') + '</button>').join('') + '</div>' +
+      ({ child: gChild, diary: gDiary, patterns: gPatterns, summary: gSummary, plan: gPlan, devices: gDevices, settings: gSettings }[t])(k);
   };
   // Shown once on a phone that was set up before the parent and child versions
   function whoseCard() {
@@ -878,13 +879,13 @@
     const L = k.link, P = SY.pairing && SY.pairing.kid === k.id;
     let h = card('<h2>📱 ' + esc(k.name) + '\'s own phone or tablet</h2>' +
       (L ? '<p class="ok">✅ Linked' + (L.seen ? '. Last heard from ' + esc(day(L.seen) + ', ' + time(L.seen)) : '. Waiting to hear from their device') + '.</p>'
-        : '<p>Link ' + esc(k.name) + '\'s device to show only their tools there. What they share comes to you here, and what you change here goes to them.</p>') +
+        : '<p>Link ' + esc(k.name) + '\'s device to show only their tools there. What they share comes to you in the <b>🧒 From ' + esc(k.name) + '</b> tab, and what you change here goes to them.</p>') +
       (SY.err ? '<p class="note">⚠️ ' + esc(SY.err) + '</p>' : '') +
       '<div class="row" style="margin-top:10px"><button data-a="pairStart">' + (L ? '+ Link another device (e.g. their tablet)' : '🔗 Link a device') + '</button>' + (L ? '<button class="light no-grow" data-a="unlink">Unlink</button>' : '') + '</div>' +
       (P ? '<p class="muted">The linking code is still open. <button class="small light" data-a="pairStart" data-v="again">Show it again</button></p>' : ''));
     h += card('<h2>What\'s shared</h2><ul>' +
-      '<li><b>To ' + esc(k.name) + '\'s device:</b> their tools, theme and look, star chart, Coming up stories, your own moments and hidden rules, All about me, calm ideas, the too-much plan, and good moments you choose to show in "My wins".</li>' +
-      '<li><b>From ' + esc(k.name) + '\'s device:</b> check-ins, social battery, and wins they add. If they change All about me or their picture, that comes back too.</li>' +
+      '<li><b>To ' + esc(k.name) + '\'s device:</b> their tools, theme and look, star chart, Coming up stories, your own moments and hidden rules, All about me, calm ideas, the too-much plan if you make one, and good moments you choose to show in "My wins".</li>' +
+      '<li><b>From ' + esc(k.name) + '\'s device</b> (see the 🧒 From ' + esc(k.name) + ' tab): check-ins, social battery, and wins they add. If they change All about me or their picture, that comes back too.</li>' +
       '<li><b>Never shared:</b> your diary, patterns and summary, and ' + esc(k.name) + '\'s private notes and drawings.</li></ul>' +
       '<p class="ok">🔒 Everything shared is scrambled (encrypted) on the phone before it\'s sent. Only your linked devices have the key, so nobody else can read it, not even us.</p>' +
       '<p class="muted">Changes show up on the other device within a few seconds when both are online. Their device has no grown-ups\' area and no settings: you change things from here.</p>');
@@ -892,10 +893,26 @@
   }
 
   /* Diary */
+  /* From the child: everything they shared (check-ins, social battery, wins), newest first, 15 at a time */
+  function gChild(k) {
+    const when = t => '<div class="muted">' + esc(day(t) + ', ' + time(t)) + '</div>';
+    const all = k.checkins.map(c => ({ t: c.t, ci: c })).concat(k.battery.map(b => ({ t: b.t, b })), k.diary.filter(e => e.by === 'child').map(w => ({ t: w.t, w }))).sort((a, b) => b.t - a.t);
+    const shown = ST.moreCi || 15;
+    const L = k.link;
+    let h = card('<h2>🧒 From ' + esc(k.name) + '</h2><p>Everything ' + esc(k.name) + ' shares shows up here as soon as it happens: check-ins, social battery and wins they add.' + (L ? '' : ' (On this phone for now. To get them from ' + esc(k.name) + '\'s own phone or tablet, link it in 📱 Devices.)') + '</p>' +
+      (L ? '<p class="muted">' + (L.seen ? '🔗 Last heard from their device: ' + esc(day(L.seen) + ', ' + time(L.seen)) : '🔗 Linked, waiting to hear from their device.') + '</p>' : '') +
+      '<p class="muted">Their private notes and drawings are never shared.</p>');
+    if (!all.length) return h + card('<p class="muted">Nothing yet.</p>');
+    return h + card('<ul class="list">' + all.slice(0, shown).map(r => {
+      if (r.ci) { const c = C.COLOURS.find(x => x.id === r.ci.c) || {}; return '<li><span class="no-grow" style="display:inline-block;width:22px;height:22px;border-radius:50%;background:' + c.hex + '"></span><div class="grow"><b>Check-in: ' + esc(c.name + ', ' + c.word) + '</b>' + (r.ci.idea ? '<div>Idea: ' + esc(r.ci.idea) + '</div>' : '') + ((r.ci.body || []).length ? '<div class="muted">Felt it: ' + esc(r.ci.body.join(', ')) + '</div>' : '') + when(r.t) + '</div></li>'; }
+      if (r.b) { const B = C.BATTERY.find(x => x.v === r.b.v) || {}; return '<li><span class="no-grow">' + cells(r.b.v) + '</span><div class="grow"><b>Social battery: ' + esc(B.label || '') + '</b>' + when(r.t) + '</div></li>'; }
+      return '<li><span class="no-grow" style="font-size:22px">🏆</span><div class="grow"><b>Win: ' + esc([].concat(r.w.good || []).join(', ') || r.w.note || r.w.what || '') + '</b>' + when(r.t) + '</div><button class="small light" data-a="dDel" data-v="' + r.w.id + '" aria-label="Delete">🗑️</button></li>';
+    }).join('') + '</ul>' + (all.length > shown ? '<button class="light" data-a="moreCi" style="width:100%;margin-top:8px">Show more (' + (all.length - shown) + ' older)</button>' : ''));
+  }
   const tickEmoji = id => (C.TICKS.find(t => t[0] === id) || ['', ''])[1];
   function gDiary(k) {
     const f = ST.filter || 'all';
-    const list = k.diary.filter(e => f === 'all' || e.type === f).slice(0, 150);
+    const list = k.diary.filter(e => e.by !== 'child' && (f === 'all' || e.type === f)).slice(0, 150);
     return card('<h2>Diary</h2><p class="muted">Jot down tricky moments and good ones. A few words is plenty. Patterns show up after a week or two.</p>' +
       '<div class="row"><button data-a="dNew" data-v="tricky">🌧️ Tricky moment</button><button data-a="dNew" data-v="good" style="background:var(--good)">⭐ Good moment</button></div>') +
       card('<div class="chips">' + [['all', 'All'], ['tricky', 'Tricky'], ['good', 'Good']].map(([v, l]) => '<button class="chip' + (f === v ? ' on' : '') + '" data-a="dFilter" data-v="' + v + '">' + l + '</button>').join('') + '</div>' +
@@ -1027,7 +1044,7 @@
       ((e.helped || []).length || e.after ? '. After: ' + esc([].concat(e.helped || [], e.after ? [e.after] : []).join(', ')) : '') + ((e.ticks || []).length ? '. Also: ' + esc(e.ticks.map(t => (C.TICKS.find(x => x[0] === t) || ['', '', t])[2]).join(', ')) : '') + '</li>').join('') + '</ul>';
     if (o.diary && good.length) h += '<h3>Recent good moments</h3><ul>' + good.slice(0, 10).map(e => '<li><b>' + esc(day(e.t)) + '</b>: ' + esc([].concat(e.good || [], e.note || e.what ? [e.note || e.what] : []).join('. ')) + '</li>').join('') + '</ul>';
     if (o.passport) h += '<div style="margin-top:14px">' + passportHtml(Object.assign({}, k, { passport: Object.assign({}, k.passport, { showPlan: o.plan }) }), true).replace('<h2>', '<h3 style="font-size:1.1em">').replace('</h2>', '</h3>') + '</div>';
-    else if (o.plan) h += '<h3>When it gets too much</h3><ol>' + k.plan.map(s => '<li>' + esc(s) + '</li>').join('') + '</ol>';
+    else if (o.plan && k.plan.length) h += '<h3>When it gets too much</h3><ol>' + k.plan.map(s => '<li>' + esc(s) + '</li>').join('') + '</ol>';
     return h + '</div>';
   }
   function summaryText(k, o) {
@@ -1038,17 +1055,21 @@
     const o = ST.sum2 = ST.sum2 || { days: 30, diary: true, passport: true, plan: true };
     return card('<h2>📄 Summary for a doctor, therapist or school</h2><p class="muted">Choose what to include. ' + (D.pro.trim() ? 'Shows "Prepared for: ' + esc(D.pro.trim()) + '".' : 'You can add a professional\'s name in Settings.') + ' ' + esc(k.name) + '\'s private notes are never included.</p>' +
       '<div class="chips">' + [[30, 'Last 30 days'], [90, 'Last 3 months'], [0, 'Everything']].map(([v, l]) => '<button class="chip' + (o.days === v ? ' on' : '') + '" data-a="sumDays" data-v="' + v + '">' + l + '</button>').join('') + '</div>' +
-      [['diary', 'Diary entries'], ['passport', 'All about me'], ['plan', 'When it gets too much plan']].map(([id, l]) => '<label class="chk"><input type="checkbox" data-f="s.sum2.' + id + '" data-rr' + (o[id] ? ' checked' : '') + '> ' + l + '</label>').join('') +
+      [['diary', 'Diary entries'], ['passport', 'All about me']].concat(k.plan.length ? [['plan', 'When it gets too much plan']] : []).map(([id, l]) => '<label class="chk"><input type="checkbox" data-f="s.sum2.' + id + '" data-rr' + (o[id] ? ' checked' : '') + '> ' + l + '</label>').join('') +
       '<div class="row" style="margin-top:10px"><button data-a="sumPrint">🖨️ Print / save PDF</button><button class="light" data-a="sumShare">📤 Share as text</button></div>') +
       summaryHtml(k, o);
   }
 
   /* Too-much plan */
+  // Optional: nothing is added unless a grown-up chooses to make a plan
   function gPlan(k) {
-    return card('<h2>🆘 When it gets too much</h2><p class="muted">A calm, step-by-step card to follow during a meltdown, one step at a time. It\'s also on the lock screen, so nobody needs to do a sum in a hurry. Change the steps to fit ' + esc(k.name) + ': one step per line.</p>' +
-      '<textarea data-f="kl.plan" style="min-height:230px">' + esc(k.plan.join('\n')) + '</textarea>' +
-      '<div class="row" style="margin-top:10px"><button data-a="crisis">Show the calm card</button><button class="light" data-a="planReset">Use the suggested steps</button></div>' +
-      '<p class="muted" style="margin-top:8px">It\'s shared in "All about me" too, if you leave that switched on.</p>');
+    if (!k.planOn) return card('<h2>🆘 When it gets too much (optional)</h2><p>Some families like a short, calm, step-by-step card to follow when things get too much, one step at a time. Others don\'t need one. It\'s entirely up to you.</p>' +
+      '<p class="muted">If you make one, you can choose to include it in "All about me" and the summary. Nothing is added unless you choose to.</p>' +
+      '<div class="row" style="margin-top:10px"><button data-a="planOn" data-v="own">✏️ Write our own steps</button><button class="light" data-a="planOn" data-v="suggested">Start from suggested steps</button></div>');
+    return card('<h2>🆘 When it gets too much</h2><p class="muted">Your own calm, step-by-step card, one step per line. Write it to fit ' + esc(k.name) + ', together if you can.</p>' +
+      '<textarea data-f="kl.plan" style="min-height:230px" placeholder="e.g. Turn the lights down.&#10;Stay close, say very little.">' + esc(k.plan.join('\n')) + '</textarea>' +
+      '<div class="row" style="margin-top:10px">' + (k.plan.length ? '<button data-a="crisis">Show the calm card</button>' : '') + '<button class="light" data-a="planReset">Use the suggested steps</button></div>' +
+      '<p class="muted" style="margin-top:8px">It\'s shown in "All about me" only if you tick it there.</p><button class="ghost" data-a="planOff">Stop using a plan</button>');
   }
 
   /* Settings */
@@ -1057,8 +1078,10 @@
       (x.id === k.id ? '<span class="tag no-grow">Showing now</span>' : '<button class="small light" data-a="switchKid" data-v="' + x.id + '">Switch</button>') + '</li>').join('') + '</ul>' +
       '<div class="row" style="margin-top:8px"><button class="light" data-a="addKid">+ Add a child</button></div>');
     h += card('<h2>' + esc(k.name) + '</h2><label class="lab">Name</label><input type="text" maxlength="24" data-f="k.name" value="' + esc(k.name) + '">' +
+      // A linked child chooses their own picture on their own device
+      (k.link ? '<label class="lab">Picture</label><p><span style="font-size:28px">' + face(k, 40) + '</span> ' + esc(k.name) + ' chooses their own picture on their device.</p>' :
       '<label class="lab">Picture</label><div class="chips">' + C.EMOJIS.map(e => '<button class="chip' + (k.emoji === e ? ' on' : '') + '" data-a="kEmoji" data-v="' + e + '">' + e + '</button>').join('') + '</div>' +
-      '<div class="row" style="margin-top:10px">' + (k.photo ? '<span class="no-grow">' + face(k, 48) + '</span><button class="light small no-grow" data-a="noPhoto" data-v="k">Remove photo</button>' : '<button class="light small no-grow" data-a="photo" data-v="k">📷 Use a photo or drawing instead</button>') + '</div>' +
+      '<div class="row" style="margin-top:10px">' + (k.photo ? '<span class="no-grow">' + face(k, 48) + '</span><button class="light small no-grow" data-a="noPhoto" data-v="k">Remove photo</button>' : '<button class="light small no-grow" data-a="photo" data-v="k">📷 Use a photo or drawing instead</button>') + '</div>') +
       '<label class="lab">Age group</label><div class="chips">' + Object.entries(C.AGES).map(([id, a]) => '<button class="chip' + (k.age === id ? ' on' : '') + '" data-a="kAge" data-v="' + id + '">' + a.label + ' (' + a.sub + ')</button>').join('') + '</div>' +
       '<label class="lab">Theme</label><div class="chips">' + Object.entries(C.THEMES).map(([id, t]) => '<button class="chip' + (k.theme === id ? ' on' : '') + '" data-a="kTheme" data-v="' + id + '">' + t.emoji + ' ' + t.label + '</button>').join('') + '</div>' +
       '<label class="lab">What\'s hardest right now?</label><div class="chips">' + C.HARD.map(x => '<button class="chip' + (k.hard.includes(x[0]) ? ' on' : '') + '" data-a="kHard" data-v="' + x[0] + '">' + esc(x[1]) + '</button>').join('') + '</div>' +
@@ -1083,7 +1106,7 @@
   const ACT = {
     nav: v => { if (v === 'grown') return isChild() ? go('home') : requireGrown(() => go('grown')); if (v === 'passport') used('passport'); go(v); },
     kids: () => {
-      if (isChild()) return ACT.linkInfo();
+      if (isChild()) return ACT.myPic();
       sheet('<h2>Who\'s using it?</h2><ul class="list">' + D.kids.map(x => '<li><span style="font-size:30px">' + face(x, 36) + '</span><span class="grow name">' + esc(x.name) + '</span>' + (x.id === D.cur ? '<span class="tag">Now</span>' : '<button class="small" data-a="switchKid" data-v="' + x.id + '">Switch</button>') + '</li>').join('') + '</ul>' +
         '<div class="row" style="margin-top:10px"><button class="light" data-a="addKid">+ Add a child (grown-up)</button></div>');
     },
@@ -1261,7 +1284,7 @@
     },
     drawAsPhoto: v => { const d = K().drawings[+v]; if (!d) return; const im = new Image(); im.onload = () => { K().photo = shrink(im, 160, 160, true); K().photoAt = Date.now(); save(); closeLayer(); render(); toast('That\'s your picture now.'); }; im.src = d.img; },
     drawDel: v => { if (!confirm('Delete this drawing?')) return; K().drawings.splice(+v, 1); save(); closeLayer(); render(); },
-    photo: v => { ST.photoFor = v; $('photoIn').click(); },
+    photo: v => { ST.photoFor = v; $('photoIn').click(); if (isChild()) closeLayer(); },
     noPhoto: v => { const k = v === 'w' ? W.kid : K(); k.photo = ''; k.photoAt = Date.now(); if (v !== 'w') save(); render(); },
 
     /* battery, wins, notes */
@@ -1303,6 +1326,7 @@
     lockNow: () => { lockUntil = 0; go('home'); toast('Grown-ups\' area locked.'); },
     ptab: v => { ST = { ptab: v }; lockUntil = Date.now() + 10 * 60000; render(); window.scrollTo(0, 0); },
     dFilter: v => { ST.filter = v; render(); },
+    moreCi: () => { ST.moreCi = (ST.moreCi || 15) + 30; render(); },
     dNew: v => {
       const now = Date.now();
       ST = { ptab: 'diary', F: { type: v, when: localInput(now), before: [], beforeNote: '', what: '', size: v === 'tricky' ? 'medium' : '', helped: [], after: '', good: [], note: '', showKid: true, ticks: isWeekday(now) ? ['school'] : [] } };
@@ -1331,8 +1355,20 @@
       try { if (navigator.share) { await navigator.share({ title: 'Summary for ' + K().name, text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
       try { await navigator.clipboard.writeText(text); toast('Summary copied. Paste it into a message or email.'); } catch (e) { alert(text); }
     },
+    planOn: v => { const k = K(); k.planOn = true; k.plan = v === 'suggested' ? clone(C.PLAN_STEPS) : []; k.passport.showPlan = false; save(); render(); },
+    planOff: () => { if (!confirm('Stop using a plan? The steps will be removed.')) return; const k = K(); k.planOn = false; k.plan = []; save(); render(); },
     planReset: () => { if (!confirm('Replace your steps with the suggested ones?')) return; K().plan = clone(C.PLAN_STEPS); save(); render(); },
-    kEmoji: v => { K().emoji = v; save(); render(); },
+    kEmoji: v => { K().emoji = v; K().photoAt = Date.now(); save(); render(); },
+    // On the child's own device: their picture is their choice
+    myPic: () => {
+      const k = K(), dr = k.drawings.slice(0, 12);
+      sheet('<h2>My picture</h2><p class="muted">Pick whatever you like. You can change it any time.</p>' +
+        '<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(56px,1fr))">' + C.EMOJIS.map(e => '<button class="pick' + (!k.photo && k.emoji === e ? ' on' : '') + '" data-a="myEmoji" data-v="' + e + '" aria-label="' + e + '"><b>' + e + '</b></button>').join('') + '</div>' +
+        (dr.length ? '<label class="lab">Or one of my drawings</label><div class="gallery">' + dr.map((d, i) => '<button data-a="drawAsPhoto" data-v="' + i + '"><img src="' + d.img + '" alt="Drawing from ' + esc(day(d.t)) + '"></button>').join('') + '</div>' : '') +
+        '<div class="row" style="margin-top:12px"><button class="light" data-a="photo" data-v="k">📷 Use a photo</button>' + (k.photo ? '<button class="light" data-a="myEmoji" data-v="' + esc(k.emoji) + '">Go back to ' + esc(k.emoji) + '</button>' : '') + '</div>' +
+        '<div class="row" style="margin-top:8px"><button class="ghost" data-a="linkInfo">🔗 Linking</button><button data-a="closeLayer">Close</button></div>');
+    },
+    myEmoji: v => { const k = K(); k.emoji = v; k.photo = ''; k.photoAt = Date.now(); save(); closeLayer(); render(); used('own-picture'); },
     kAge: v => { K().age = v; save(); render(); toast('Tip: "Use the usual tools for this age" is under Tools.'); },
     kTheme: v => { K().theme = v; save(); render(); },
     kHard: v => { const k = K(); k.hard = k.hard.includes(v) ? k.hard.filter(x => x !== v) : k.hard.concat(v); save(); render(); },
