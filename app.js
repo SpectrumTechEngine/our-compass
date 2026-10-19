@@ -557,7 +557,7 @@
         '<div class="chips">' + [[4, 'Thin'], [8, 'Medium'], [18, 'Thick']].map(([v, l]) => '<button class="chip size' + (ST.size === v ? ' on' : '') + '" data-a="penSize" data-v="' + v + '">' + l + '</button>').join('') + '</div>' +
         '<div class="row" style="margin-top:8px"><button class="light" data-a="padUndo">↶ Undo</button><button class="light" data-a="padClear">Clear</button><button data-a="padSave">Save</button></div>');
     }
-    return backBtn('home', 'Home') + card('<h2>🖍️ ' + esc(toolName(toolById('draw'), k)) + '</h2><p class="muted">Draw how you feel, or anything you like. Drawings stay on this device. They\'re never sent anywhere.</p><button data-a="padNew">New drawing</button>') +
+    return backBtn('home', 'Home') + card('<h2>🖍️ ' + esc(toolName(toolById('draw'), k)) + '</h2><p class="muted">Draw how you feel, or anything you like.</p><button data-a="padNew">New drawing</button>') +
       (k.drawings.length ? card('<div class="gallery">' + k.drawings.map((d, i) => '<button data-a="drawShow" data-v="' + i + '"><img src="' + d.img + '" alt="Drawing from ' + esc(day(d.t)) + '">' + (d.c ? '<i style="background:' + (C.COLOURS.find(c => c.id === d.c) || {}).hex + '"></i>' : '') + '</button>').join('') + '</div>') : '');
   };
   function initPad() {
@@ -654,10 +654,11 @@
      LINKED DEVICES: what each side shares, scrambled by sync.js before it leaves the phone.
      Parent to child (box "p"): the child's settings and everything a parent makes for them.
      Child to parent (box "c"): check-ins, social battery and wins they add (plus All about me and
-     their picture if they change them). The diary, notes and drawings are never in either box.
+     their picture if they change them). Box "d" = the child's drawings, child to parent.
+     The diary and the child's private notes are never in any box.
      ===================================================================== */
   const OS = window.OC_SYNC;
-  const SY = { stops: [], timer: null, sent: {}, gotC: false, err: '', pairing: null, my: '' };
+  const SY = { stops: [], timer: null, sent: {}, gotC: false, err: '', pairing: null, my: '', gotD: false };
   const KID_SHARED = ['name', 'age', 'theme', 'hard', 'tools', 'readAloud', 'sounds', 'calmer', 'grown', 'big', 'easy', 'pda', 'simple', 'calm', 'plan', 'planOn', 'reward', 'stories', 'custom'];
   const fresh = x => x.u || x.t || 0;
   // Joins two lists, keeping the newer copy of anything in both
@@ -678,6 +679,7 @@
     return { v: 1, checkins: k.checkins.slice(0, 400), battery: k.battery.slice(0, 400), wins: k.diary.filter(e => e.by === 'child').slice(0, 200),
       emoji: k.emoji, photo: k.photo, photoAt: k.photoAt, passport: k.passport, hi: (D.link && D.link.hi) || '' };
   }
+  const drawBox = k => ({ v: 1, drawings: k.drawings.slice(0, 15).map(d => ({ t: d.t, img: d.img, c: d.c || '' })) });
   // Picture and All about me can be changed on either side: the newest change wins
   function takeNewer(k, b) {
     if (b.photoAt > (k.photoAt || 0)) { k.photo = b.photo || ''; if (b.emoji) k.emoji = b.emoji; k.photoAt = b.photoAt; }
@@ -709,6 +711,18 @@
     }
     SY.gotC = true; save(); safeRender();
   }
+  // On the child's device: the shared drawings box (their phone and tablet both add to it)
+  function drawsFromSibling(b) {
+    const k = K(); if (!k) return;
+    if (b) { const gone = new Set(k.drawGone || []); k.drawings = joinList(k.drawings, (b.drawings || []).filter(d => !gone.has(d.t)), x => x.t).slice(0, 40); SY.sent.d = JSON.stringify(b); }
+    SY.gotD = true; save(); safeRender();
+  }
+  // On the parent's phone: the child's drawings arrive, and are kept even if the child deletes them later
+  function drawsFromChild(id, b) {
+    const k = D.kids.find(x => x.id === id); if (!k || !k.link || !b) return;
+    k.drawings = joinList(k.drawings, b.drawings, x => x.t).slice(0, 40);
+    save(); safeRender();
+  }
   // On the parent's phone: a child's box arrives
   function fromChild(id, b) {
     const k = D.kids.find(x => x.id === id); if (!k || !k.link || !b) return;
@@ -725,11 +739,15 @@
   function syncStart() {
     syncStop(); if (!OS) return;
     const oops = e => { SY.err = navigator.onLine === false ? 'Offline. Changes will be sent when you\'re back online.' : 'Couldn\'t reach the sync server just now. It will keep trying.'; if (LOCALHOST) console.warn('sync', e); };
-    if (isParent()) D.kids.filter(k => k.link).forEach(k => SY.stops.push(OS.watch(k.link.key, 'c', b => { SY.err = ''; fromChild(k.id, b); }, oops)));
+    if (isParent()) D.kids.filter(k => k.link).forEach(k => {
+      SY.stops.push(OS.watch(k.link.key, 'c', b => { SY.err = ''; fromChild(k.id, b); }, oops));
+      SY.stops.push(OS.watch(k.link.key, 'd', b => drawsFromChild(k.id, b), oops));
+    });
     if (isChild() && D.link) {
-      SY.gotC = false;
+      SY.gotC = false; SY.gotD = false;
       SY.stops.push(OS.watch(D.link.key, 'p', (b, there) => { SY.err = ''; if (there) fromParent(b); else if (D.link && !D.link.lost) { D.link.lost = true; save(); safeRender(); } }, oops));
       SY.stops.push(OS.watch(D.link.key, 'c', b => fromSibling(b), oops));
+      SY.stops.push(OS.watch(D.link.key, 'd', b => drawsFromSibling(b), oops));
     }
     syncSoon();
   }
@@ -739,6 +757,7 @@
     const jobs = [];
     if (isParent()) D.kids.filter(k => k.link).forEach(k => jobs.push([k.link.key, 'p', k.id + 'p', parentBox(k)]));
     if (isChild() && D.link && !D.link.lost && SY.gotC && K()) jobs.push([D.link.key, 'c', 'c', childBox(K())]);
+    if (isChild() && D.link && !D.link.lost && SY.gotD && K()) jobs.push([D.link.key, 'd', 'd', drawBox(K())]);
     for (const [key, which, tag, box] of jobs) {
       const s = JSON.stringify(box); if (SY.sent[tag] === s) continue;
       try { await OS.write(key, which, box); SY.sent[tag] = s; SY.err = ''; }
@@ -794,7 +813,7 @@
       '<p class="muted" style="text-align:center">Or they can type these letters:</p>' +
       '<div class="code" aria-label="Code ' + SY.my.split('').join(' ') + '">' + SY.my.slice(0, 4) + ' ' + SY.my.slice(4) + '</div>' +
       '<p id="linkMsg" class="ok" role="status" style="text-align:center">Waiting for your parent…</p>' +
-      '<p class="muted">After linking, this device shows only your tools. Notes and drawings made here stay here.</p>' +
+      '<p class="muted">After linking, this device shows only your tools. Notes made here stay here.</p>' +
       '<div class="row" style="margin-top:12px"><button class="light no-grow" data-a="' + (inSetup ? 'wBack' : 'nav') + '" data-v="home">Back</button></div>');
   };
   let waiting = false;
@@ -919,8 +938,8 @@
       '');
     h += card('<h2>What\'s shared</h2><ul>' +
       '<li><b>To ' + esc(k.name) + '\'s device:</b> their tools, theme and look, star chart, Coming up stories, your own moments and hidden rules, All about me, calm ideas, the too-much plan if you make one, timers you start for them (if their Timer tool is on), and good moments you choose to show in "My wins".</li>' +
-      '<li><b>From ' + esc(k.name) + '\'s device</b> (see the 🧒 From ' + esc(k.name) + ' tab): check-ins, social battery, and wins they add. If they change All about me or their picture, that comes back too.</li>' +
-      '<li><b>Never shared:</b> your diary, patterns and summary, and ' + esc(k.name) + '\'s private notes and drawings.</li></ul>' +
+      '<li><b>From ' + esc(k.name) + '\'s device</b> (see the 🧒 From ' + esc(k.name) + ' tab): check-ins, social battery, wins they add, and their drawings. If they change All about me or their picture, that comes back too.</li>' +
+      '<li><b>Never shared:</b> your diary, patterns and summary, and ' + esc(k.name) + '\'s private notes.</li></ul>' +
       '<p class="ok">🔒 Everything shared is scrambled (encrypted) on the phone before it\'s sent. Only your linked devices have the key, so nobody else can read it, not even us.</p>' +
       '<p class="muted">Changes show up on the other device within a few seconds when both are online. Their device has no parent\'s side and no settings: you change things from here.</p>');
     return h;
@@ -930,16 +949,17 @@
   /* From the child: everything they shared (check-ins, social battery, wins), newest first, 15 at a time */
   function gChild(k) {
     const when = t => '<div class="muted">' + esc(day(t) + ', ' + time(t)) + '</div>';
-    const all = k.checkins.map(c => ({ t: c.t, ci: c })).concat(k.battery.map(b => ({ t: b.t, b })), k.diary.filter(e => e.by === 'child').map(w => ({ t: w.t, w }))).sort((a, b) => b.t - a.t);
+    const all = k.checkins.map(c => ({ t: c.t, ci: c })).concat(k.battery.map(b => ({ t: b.t, b })), k.diary.filter(e => e.by === 'child').map(w => ({ t: w.t, w })), k.drawings.map((d, i) => ({ t: d.t, d, i }))).sort((a, b) => b.t - a.t);
     const shown = ST.moreCi || 15;
     const L = k.link;
-    let h = card('<h2>🧒 From ' + esc(k.name) + '</h2><p>Everything ' + esc(k.name) + ' shares shows up here as soon as it happens: check-ins, social battery and wins they add.' + (L ? '' : ' (On this phone for now. To get them from ' + esc(k.name) + '\'s own phone or tablet, link it in 📱 Devices.)') + '</p>' +
+    let h = card('<h2>🧒 From ' + esc(k.name) + '</h2><p>Everything ' + esc(k.name) + ' shares shows up here as soon as it happens: check-ins, social battery, wins they add, and drawings.' + (L ? '' : ' (On this phone for now. To get them from ' + esc(k.name) + '\'s own phone or tablet, link it in 📱 Devices.)') + '</p>' +
       (L ? '<p class="muted">' + (L.seen ? '🔗 Last heard from their device: ' + esc(day(L.seen) + ', ' + time(L.seen)) : '🔗 Linked, waiting to hear from their device.') + '</p>' : '') +
-      '<p class="muted">Their private notes and drawings are never shared.</p>');
+      '<p class="muted">Their private notes are never shared.</p>');
     if (!all.length) return h + card('<p class="muted">Nothing yet.</p>');
     return h + card('<ul class="list">' + all.slice(0, shown).map(r => {
       if (r.ci) { const c = C.COLOURS.find(x => x.id === r.ci.c) || {}; return '<li><span class="no-grow" style="display:inline-block;width:22px;height:22px;border-radius:50%;background:' + c.hex + '"></span><div class="grow"><b>Check-in: ' + esc(c.name + ', ' + c.word) + '</b>' + (r.ci.idea ? '<div>Idea: ' + esc(r.ci.idea) + '</div>' : '') + ((r.ci.body || []).length ? '<div class="muted">Felt it: ' + esc(r.ci.body.join(', ')) + '</div>' : '') + when(r.t) + '</div></li>'; }
       if (r.b) { const B = C.BATTERY.find(x => x.v === r.b.v) || {}; return '<li><span class="no-grow">' + cells(r.b.v) + '</span><div class="grow"><b>Social battery: ' + esc(B.label || '') + '</b>' + when(r.t) + '</div></li>'; }
+      if (r.d) { const c = C.COLOURS.find(x => x.id === r.d.c); return '<li><button class="no-grow" data-a="drawShow" data-v="' + r.i + '" style="padding:0;border:0;background:none;min-height:0"><img src="' + r.d.img + '" alt="Drawing" style="width:64px;height:64px;border-radius:8px;background:#fff;display:block"></button><div class="grow"><b>Drawing' + (c ? ': feeling ' + esc(c.name + ', ' + c.word) : '') + '</b>' + when(r.t) + '</div></li>'; }
       return '<li><span class="no-grow" style="font-size:22px">🏆</span><div class="grow"><b>Win: ' + esc([].concat(r.w.good || []).join(', ') || r.w.note || r.w.what || '') + '</b>' + when(r.t) + '</div><button class="small light" data-a="dDel" data-v="' + r.w.id + '" aria-label="Delete">🗑️</button></li>';
     }).join('') + '</ul>' + (all.length > shown ? '<button class="light" data-a="moreCi" style="width:100%;margin-top:8px">Show more (' + (all.length - shown) + ' older)</button>' : ''));
   }
@@ -1177,7 +1197,7 @@
       const L = D.link;
       sheet('<h2>🔗 ' + (!L ? 'Not linked yet' : L.lost ? 'Not linked right now' : 'Linked with your parent') + '</h2>' +
         (L && !L.lost ? '<p>Your check-ins, social battery and wins go to your parent\'s phone. Your tools and stories come from there.' + (L.seen ? ' Last update: ' + esc(day(L.seen) + ', ' + time(L.seen)) + '.' : '') + '</p>' : '<p>Your parent can link this device from their phone.</p>') +
-        '<p class="ok">📓 Your notes and drawings stay on this device. They\'re never sent anywhere.</p>' +
+        '<p class="ok">📓 Your notes stay on this device. They\'re never sent anywhere.</p>' +
         '<p class="muted">Everything that\'s shared is scrambled first, so only your family\'s linked devices can read it.</p>' +
         '<div class="row"><button class="light" data-a="relink">' + (L ? 'Link again' : 'Link now') + '</button><button data-a="closeLayer">Close</button></div>');
     },
@@ -1318,7 +1338,7 @@
         '<div class="row"><button class="light" data-a="drawAsPhoto" data-v="' + v + '">Use as my picture</button><button class="light" data-a="drawDel" data-v="' + v + '">Delete</button><button data-a="closeLayer">Close</button></div>');
     },
     drawAsPhoto: v => { const d = K().drawings[+v]; if (!d) return; const im = new Image(); im.onload = () => { K().photo = shrink(im, 160, 160, true); K().photoAt = Date.now(); save(); closeLayer(); render(); toast('That\'s your picture now.'); }; im.src = d.img; },
-    drawDel: v => { if (!confirm('Delete this drawing?')) return; K().drawings.splice(+v, 1); save(); closeLayer(); render(); },
+    drawDel: v => { if (!confirm('Delete this drawing?')) return; const k = K(), d = k.drawings[+v]; if (d && isChild()) k.drawGone = (k.drawGone || []).concat(d.t).slice(-200); k.drawings.splice(+v, 1); save(); closeLayer(); render(); },
     photo: v => { ST.photoFor = v; $('photoIn').click(); if (layer.innerHTML) closeLayer(); },
     noPhoto: v => { const k = v === 'w' ? W.kid : K(); k.photo = ''; k.photoAt = Date.now(); if (v !== 'w') save(); render(); },
 
