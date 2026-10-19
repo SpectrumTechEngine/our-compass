@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Our Compass Privacy</title>
-<meta name="description" content="Our Compass keeps everything on your phone. What that means, and the few things that do use the internet.">
+<meta name="description" content="Our Compass keeps your diary on your phone. What a linked child's device shares (scrambled before it leaves the phone), and the few things that use the internet.">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <style>
 :root { --bg: #F3F3F0; --card: #FFFFFF; --ink: #22313A; --muted: #5B6A72; --line: #E0E0DA; --accent: #2F5968; }
@@ -26,16 +26,28 @@ a { color: var(--accent); }
 <main>
   <div class="top"><img src="icon-192.png" alt=""><a href="./">← Back to Our Compass</a></div>
   <h1>Privacy policy</h1>
-  <p class="muted">Our Compass, by The Spectrum Tech Engine. Last updated 17 October 2026.</p>
+  <p class="muted">Our Compass, by The Spectrum Tech Engine. Last updated 19 October 2026.</p>
 
   <h2>The short version</h2>
-  <p>Everything you put into Our Compass stays on your phone. There are no accounts, no sign-up and no adverts. We never see your child's name, your diary, check-ins, notes or "All about me" passport.</p>
+  <p>There are no accounts, no sign-up and no adverts. Your diary stays on your phone. If you link your child's own phone or tablet, only your family's linked devices can read what they share: it's scrambled (encrypted) on the phone before it leaves, and the key never leaves your family's devices. We never see your child's name, your diary, check-ins, notes or "All about me" passport.</p>
 
   <h2>What is saved, and where</h2>
   <ul>
-    <li><b>On your phone only:</b> each child's name or nickname, picture, age group, settings, check-ins, social battery, star chart, stories, the diary of tricky and good moments, the calm plan, the "All about me" passport, drawings, a profile photo if you add one, and your child's private notes.</li>
+    <li><b>On the phone it was written on, and never shared:</b> the diary of tricky and good moments, patterns, the summary, the professional's name, and your child's private notes and drawings.</li>
+    <li><b>On your phone, and on your child's linked device if you link one:</b> each child's name or nickname, picture, age group, settings, check-ins, social battery, wins, star chart, stories, your own moments and hidden rules, calm ideas, the calm plan and the "All about me" passport.</li>
     <li>It's saved in the browser's storage on your phone (or inside the Android app). The website and the Android app keep separate copies.</li>
-    <li>If you clear your browser data or uninstall the app, it's deleted. Use <b>Save backup</b> in Grown-ups → Settings to keep a copy.</li>
+    <li>If you clear your browser data or uninstall the app, it's deleted. Use <b>Save backup</b> in Parent → Settings to keep a copy.</li>
+  </ul>
+
+  <h2>Linking your child's own device</h2>
+  <ul>
+    <li><b>It's your choice.</b> Nothing is linked unless you show the linking code on your phone and your child's device scans it or types it in.</li>
+    <li><b>Scrambled before it leaves the phone.</b> Linking makes a random secret key. It travels inside the QR code or the 8-letter code, never in a form we can read. Everything shared is scrambled with that key (AES-256, the same kind of encryption banks use) on the phone, before it's sent.</li>
+    <li><b>Where it waits.</b> The scrambled copy is kept on Google Firebase (our own Firebase project) so the other device can pick it up, even when the two aren't online at the same time. Without your family's key it's unreadable, to us, to Google, and to anyone else. Each box is named from the key, so nobody can find it or list it.</li>
+    <li><b>The 8-letter code</b> works for 15 minutes, and is deleted as soon as the child's device uses it.</li>
+    <li><b>What goes where.</b> From your phone to your child's device: their settings, tools, theme, star chart, Coming up stories, your own moments and rules, "All about me", calm ideas, the calm plan, and good moments you choose to show in "My wins". From your child's device to you: check-ins, social battery, and wins they add, plus "All about me" or their picture if they change them.</li>
+    <li><b>Never shared:</b> your diary, patterns and summary, and your child's private notes and drawings.</li>
+    <li><b>Unlinking</b> (Parent → Devices) deletes the scrambled copies from the server. Each device keeps what it already has.</li>
   </ul>
 
   <h2>When you choose to share</h2>
@@ -48,14 +60,15 @@ a { color: var(--accent); }
   <h2>The few things that use the internet</h2>
   <ul>
     <li><b>Opening the app:</b> the app's pages are loaded from our website (hosted by GitHub Pages), like any website.</li>
+    <li><b>Linked devices:</b> only if you link one, as explained above. Only scrambled data is sent.</li>
     <li><b>Anonymous usage counts:</b> to see which parts are useful, the app counts things like "a check-in happened" or "a summary was printed". These counts are anonymous. They never include names, words you typed, which colour was picked, or anything from the diary.</li>
     <li><b>Feedback:</b> if you tap <b>Send feedback</b>, the message you type is sent to us. Please don't include your child's name.</li>
     <li><b>Easy-read font:</b> if switched on, the font is downloaded from Google Fonts.</li>
-    <li><b>QR code maker:</b> the first time you make a QR code, a small code library is downloaded from jsDelivr. Your passport is made into a QR code on your phone, not online.</li>
+    <li><b>QR code maker and scanner:</b> the first time you make or scan a QR code, a small code library may be downloaded from jsDelivr. QR codes are made and read on the phone, not online. The camera is only used while the scanner is open, and the picture never leaves the phone.</li>
   </ul>
 
   <h2>Children</h2>
-  <p>Our Compass is made for parents and carers to use with their children. Children's information stays on the family's own phone and is never collected by us.</p>
+  <p>Our Compass is made for parents and carers to use with their children. Children's information stays on the family's own devices. If devices are linked, it's scrambled before it leaves the phone, and we can't read it.</p>
 
   <h2>Not medical advice</h2>
   <p>Our Compass supports, but doesn't replace, a speech and language therapist, occupational therapist, psychologist, GP or CAMHS. Patterns it shows are things that happened together, not proof of what causes what.</p>

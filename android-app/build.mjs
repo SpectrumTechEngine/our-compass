@@ -10,7 +10,7 @@ import path from "node:path";
 const APK_NAME = "our-compass.apk";
 const ICON = "icon.png";                 // the website's own icon, in the repo's top folder
 const ORIENTATION = "portrait";        // null = the screen turns freely
-const PERMISSIONS = ["VIBRATE"];          // extra Android permissions this app needs
+const PERMISSIONS = ["VIBRATE", "CAMERA"];          // extra Android permissions this app needs
 const INNER = 540;                       // how big the icon sits inside the 1024 Android icon (smaller = more room round it)
 
 const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, "$1"));

@@ -1,5 +1,7 @@
-/* Our Compass: everything is saved on this phone only (localStorage). Nothing is sent anywhere,
-   apart from anonymous usage counts (ste-owner.js) and feedback the user chooses to send. */
+/* Our Compass: everything is saved on this phone (localStorage). A parent's phone can be linked to a child's
+   own devices (sync.js): only the child's side is shared, scrambled on the phone before it is uploaded.
+   The diary, patterns, summary and private notes never leave the phone they were written on.
+   Apart from that: anonymous usage counts (ste-owner.js) and feedback the user chooses to send. */
 (function () {
   'use strict';
   const C = window.OC_CONTENT;
@@ -22,19 +24,23 @@
   const used = what => { if (!played) { played = true; ste('track', 'play'); } ste('detail', what); };
 
   /* ---------- Saved data ---------- */
-  const KEY = 'oc_data_v1';
+  const LOCALHOST = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  // ?dev=name on this computer keeps a separate copy, so two tabs can act as two phones
+  const DEV = LOCALHOST ? (new URLSearchParams(location.search).get('dev') || '').replace(/[^a-z0-9]/gi, '') : '';
+  const KEY = 'oc_data_v1' + (DEV ? '_' + DEV : '');
   function newKid(name, emoji, age) {
     age = age || 'middle';
     return {
       id: uid(), name: name || '', emoji: emoji || '🦊', age, theme: 'plain', hard: [], tools: defaultTools(age),
-      readAloud: false, sounds: true, calmer: false, grown: age === 'teen', big: false, easy: false, pda: false, simple: false, photo: '',
+      readAloud: false, sounds: true, calmer: false, grown: age === 'teen', big: false, easy: false, pda: false, simple: false, photo: '', photoAt: 0,
+      link: null, gone: [],
       calm: clone(C.CALM_IDEAS), plan: clone(C.PLAN_STEPS), cards: [],
       checkins: [], battery: [], diary: [], notes: [], stories: [], drawings: [],
       reward: { goals: [], target: 10, treat: '', stars: [], rounds: [] },
       ft: { first: null, then: null, firstDone: false },
       today: { name: 'Morning', items: clone(C.TODAY_PRESETS.Morning), done: [], day: '' },
       custom: { scenarios: [], rules: [] },
-      passport: { likes: '', helps: '', upsets: '', overwhelm: '', talk: '', sense: {}, senseNote: {}, showPlan: true }
+      passport: { likes: '', helps: '', upsets: '', overwhelm: '', talk: '', sense: {}, senseNote: {}, showPlan: true, at: 0 }
     };
   }
   function defaultTools(age) { const t = {}; C.TOOLS.forEach(x => { t[x.id] = x.on.includes(age); }); return t; }
@@ -49,12 +55,20 @@
   function load() {
     try {
       const v = JSON.parse(localStorage.getItem(KEY) || 'null');
-      if (v && Array.isArray(v.kids)) { v.kids = v.kids.filter(k => k && k.id).map(fixKid); v.pro = v.pro || ''; v.timer = v.timer || null; return v; }
+      if (v && Array.isArray(v.kids)) {
+        v.kids = v.kids.filter(k => k && k.id).map(fixKid); v.pro = v.pro || ''; v.timer = v.timer || null;
+        // role: 'parent', 'child', or '' for a phone set up before the two versions (it keeps the old sum lock until asked)
+        if (typeof v.role !== 'string') v.role = '';
+        v.link = v.link || null;
+        return v;
+      }
     } catch (e) {}
-    return { v: 1, setupDone: false, pro: '', kids: [], cur: '', timer: null };
+    return { v: 1, setupDone: false, pro: '', kids: [], cur: '', timer: null, role: '', link: null };
   }
   let D = load();
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { toast('This phone\'s storage is full, so that wasn\'t saved.'); } }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { toast('This phone\'s storage is full, so that wasn\'t saved.'); } syncSoon(); }
+  const isParent = () => D.role === 'parent', isChild = () => D.role === 'child';
+  const ciNow = () => K() && K().checkins.find(x => x.t === ST.ci); // the check-in on screen (by its time, so syncing can't mix them up)
   const K = () => D.kids.find(k => k.id === D.cur) || D.kids[0];
   const teen = k => k.age === 'teen' || k.grown;
   const toolName = (t, k) => teen(k) ? t.teen : t.name;
@@ -85,12 +99,17 @@
     const kb = $('kidBtn');
     kb.classList.toggle('hidden', !k || V === 'setup');
     if (k) kb.innerHTML = '<b>' + face(k, 28) + '</b><span>' + esc(k.name) + '</span>' + (D.kids.length > 1 ? ' ▾' : '');
-    $('nav').classList.toggle('hidden', V === 'setup');
-    document.querySelectorAll('#nav button').forEach(n => n.classList.toggle('on', n.dataset.v === navOf(V)));
+    // Parent's phone: own side first. Child's device: no grown-ups' tab at all.
+    const items = isChild() ? [['home', '🏠', 'Home'], ['passport', '🪪', 'All about me']]
+      : isParent() ? [['grown', '👪', 'Parent'], ['home', '🧒', k ? esc(k.name) + '\'s tools' : 'Child\'s tools'], ['passport', '🪪', 'All about me']]
+      : [['home', '🏠', 'Home'], ['passport', '🪪', 'All about me'], ['grown', '👪', 'Grown-ups']];
+    const nav = $('nav');
+    nav.innerHTML = items.map(([v, e, l]) => '<button data-a="nav" data-v="' + v + '" class="' + (v === navOf(V) ? 'on' : '') + '"><b>' + e + '</b>' + l + '</button>').join('');
+    nav.classList.toggle('hidden', V === 'setup');
     const meta = document.querySelector('meta[name=theme-color]');
     if (meta) meta.content = getComputedStyle(b).getPropertyValue('--brand').trim() || '#2f5968';
   }
-  const navOf = v => v === 'passport' ? 'passport' : (['grown', 'diaryForm', 'lock'].includes(v) ? 'grown' : 'home');
+  const navOf = v => v === 'passport' ? 'passport' : (['grown', 'diaryForm', 'lock', 'pairShow'].includes(v) ? 'grown' : 'home');
 
   /* ---------- Rendering ---------- */
   let breathT = null;
@@ -104,19 +123,26 @@
     if (V === 'timer') timerPaint();
     if (V === 'draw' && ST.drawing) initPad();
   }
+  const homeV = () => isParent() ? 'grown' : 'home';
+  // Re-draw after a sync, but never while someone is typing or drawing
+  function safeRender() {
+    const a = document.activeElement;
+    if (V === 'setup' || layer.innerHTML || (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) || (V === 'draw' && ST.drawing)) { applyLook(); return; }
+    render();
+  }
   function go(v, keepState) {
     if (!keepState) ST = { ptab: ST.ptab };
-    const wasHome = V === 'home';
+    const wasHome = V === homeV();
     V = v; render(); window.scrollTo(0, 0);
     if (wasHome && v !== 'home') { try { history.pushState({ oc: 1 }, ''); } catch (e) {} }
     if (VIEWS[v] && toolById(v)) used('tool-' + v);
   }
   window.addEventListener('popstate', () => {
     if (layer.innerHTML) { closeLayer(); try { history.pushState({ oc: 1 }, ''); } catch (e) {} return; }
-    if (V === 'setup' || V === 'home') return;
-    const to = BACK[V] || 'home';
+    if (V === 'setup' || V === homeV()) return;
+    const to = BACK[V] || (V === 'home' ? homeV() : 'home');
     V = to; render();
-    if (to !== 'home') { try { history.pushState({ oc: 1 }, ''); } catch (e) {} }
+    if (to !== homeV()) { try { history.pushState({ oc: 1 }, ''); } catch (e) {} }
   });
 
   /* ---------- Little helpers for building screens ---------- */
@@ -160,12 +186,16 @@
     document.body.appendChild(t); clearTimeout(toastT); toastT = setTimeout(() => t.remove(), undo ? 8000 : 3000);
   }
   function sheet(html) { layer.innerHTML = '<div class="sheet" data-a="closeLayer"><div data-stop>' + html + '</div></div>'; }
-  function closeLayer() { layer.innerHTML = ''; try { speechSynthesis.cancel(); } catch (e) {} }
+  function closeLayer() { layer.innerHTML = ''; scanStop(); try { speechSynthesis.cancel(); } catch (e) {} }
   function printHTML(html) { $('print').innerHTML = html; setTimeout(() => window.print(), 50); }
 
-  /* ---------- Grown-ups' lock: a times-table sum, just to stop little fingers ---------- */
+  /* ---------- Grown-up jobs. Parent's phone: straight in. Child's device: done from the parent's phone.
+     A phone set up before the two versions keeps the old times-table sum until it's told whose it is. ---------- */
   const unlocked = () => Date.now() < lockUntil;
+  const gu = html => isChild() ? '' : html; // buttons for grown-up jobs, hidden on a child's device
   function requireGrown(fn) {
+    if (isParent()) { fn(); return; }
+    if (isChild()) { closeLayer(); toast('Your grown-up can do this from their phone.'); return; }
     if (unlocked()) { lockUntil = Date.now() + 10 * 60000; fn(); return; }
     closeLayer();
     const a = 3 + Math.floor(Math.random() * 7), b = 3 + Math.floor(Math.random() * 7);
@@ -198,17 +228,20 @@
   /* ---------- First-time setup ---------- */
   VIEWS.setup = function () {
     const w = W, k = w.kid;
-    const steps = w.adding ? [1, 2, 3, 5] : [0, 1, 2, 3, 4, 5];
-    const n = steps.indexOf(w.step) + 1, of = steps.length;
+    const steps = w.adding ? [1, 2, 3, 5] : [0, 1, 2, 3, 4, 5];    const n = steps.indexOf(w.step) + 1, of = steps.length;
     const head = w.step > 0 && w.step < 5 ? '<p class="muted">Step ' + (n - (w.adding ? 0 : 1)) + ' of ' + (of - (w.adding ? 1 : 2)) + '</p>' : '';
     const nav = (next, label) => '<div class="row" style="margin-top:14px">' + (w.step > (w.adding ? 1 : 0) ? '<button class="light no-grow" data-a="wBack">Back</button>' : (w.adding ? '<button class="light no-grow" data-a="wCancel">Cancel</button>' : '')) + '<button data-a="' + next + '">' + esc(label || 'Next') + '</button></div>';
+    if (w.step === 'link') return VIEWS.linkMe(null, true);
     if (w.step === 0) return card('<h2>👋 Welcome to Our Compass</h2><p class="hello" style="font-size:1.15em">You know your child best. This is here to help.</p>' +
       '<p>Our Compass is a free, private toolkit for autistic children and their families:</p><ul>' +
       '<li><b>For your child:</b> a colour check-in, calm corner, first/then board, timer, quick cards, everyday "what would you do?" moments, and more.</li>' +
       '<li><b>For you:</b> a diary of tricky and good moments, patterns to spot, a calm plan for when it gets too much, and a summary to print or share.</li>' +
       '<li><b>Together:</b> an "All about me" passport to share with school or grandparents.</li></ul>' +
-      '<p class="ok">🔒 Everything stays on this phone. No accounts, nothing uploaded.</p>' + disclaimer +
-      '<p class="muted">Setting up takes about a minute. You can change everything later.</p>' + nav('wNext', 'Let\'s start'));
+      '<p class="ok">🔒 Private. No accounts. Your diary stays on your phone. If your child has their own phone or tablet, you can link it: their side is scrambled before it leaves the phone, so only your family\'s linked devices can read it.</p>' + disclaimer) +
+      card('<h2>Whose device is this?</h2><div class="grid" style="grid-template-columns:1fr 1fr">' +
+        '<button class="pick" data-a="wRole" data-v="parent"><b>👪</b>Mine<small>Parent or carer</small></button>' +
+        '<button class="pick" data-a="wRole" data-v="child"><b>🧒</b>My child\'s<small>Their own phone or tablet</small></button></div>' +
+        '<p class="muted" style="margin-top:10px">Start on the parent\'s phone. A child\'s device gets everything from there.</p>');
     if (w.step === 1) return card(head + '<h2>Who is it for?</h2>' +
       '<label class="lab" for="wName">First name or nickname</label><input type="text" id="wName" maxlength="24" data-f="w.name" value="' + esc(k.name) + '" placeholder="e.g. Sam">' +
       '<label class="lab">Pick a picture</label><div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(56px,1fr))">' + C.EMOJIS.map(e => '<button class="pick' + (k.emoji === e ? ' on' : '') + '" data-a="wEmoji" data-v="' + e + '" aria-label="' + e + '"><b>' + e + '</b></button>').join('') + '</div>' +
@@ -223,8 +256,8 @@
       '<div style="margin-top:12px">' + lookSwitches(k, 'w.') + '</div>' + nav('wNext'));
     if (w.step === 4) return card(head + '<h2>Anyone helping you? (optional)</h2><p class="muted">For example a speech and language therapist, psychologist or teacher. Their name is only shown on the summary you print or share.</p>' +
       '<input type="text" maxlength="60" data-f="d.pro" value="' + esc(D.pro) + '" placeholder="e.g. Dr Byrne, CAMHS">' + nav('wNext'));
-    return card('<h2>🎉 All set for ' + esc(k.name) + '!</h2><p>Everything can be changed later in <b>Grown-ups → Settings</b>, including which tools show.</p>' +
-      '<p class="muted">The grown-ups\' area is behind a simple sum, like 7 × 6. It\'s not a password, just enough to stop little fingers.</p>' +
+    return card('<h2>🎉 All set for ' + esc(k.name) + '!</h2><p>Everything can be changed later in <b>Parent → Settings</b>, including which tools show.</p>' +
+      '<p class="muted">If ' + esc(k.name) + ' has their own phone or tablet, link it from <b>Parent → 📱 Devices</b>. Your diary, patterns and summary stay on this phone only.</p>' +
       '<div class="row" style="margin-top:14px"><button class="light" data-a="wAnother">+ Add another child</button><button data-a="wDone">Start</button></div>');
   };
   function lookSwitches(k, p) {
@@ -249,7 +282,9 @@
     const tools = orderedTools(k).filter(t => t.id !== 'checkin' || !k.tools.checkin);
     h += '<div class="grid">' + orderedTools(k).filter(t => t.id !== 'checkin').map(t => '<button class="tile" data-a="nav" data-v="' + t.id + '"><b>' + t.emoji + '</b>' + esc(toolName(t, k)) + (!simpleWords(k) ? '<small>' + esc(t.desc) + '</small>' : '') + '</button>').join('') +
       '<button class="tile" data-a="nav" data-v="passport"><b>🪪</b>All about me' + (k.age !== 'little' ? '<small>What helps me, to share</small>' : '') + '</button></div>';
-    if (!tools.length) h += '<p class="muted">All the tools are switched off. A grown-up can switch them on in Settings.</p>';
+    if (!tools.length) h += '<p class="muted">All the tools are switched off. ' + (isChild() ? 'Your grown-up can switch them on from their phone.' : 'A grown-up can switch them on in Settings.') + '</p>';
+    if (isParent()) h = '<p class="note">👀 This is what ' + esc(k.name) + ' sees' + (k.link ? ' on their own device' : '') + '. You can use it together, give stars and write stories here.</p>' + h;
+    if (isChild()) h += '<div class="link-note"><button class="ghost" data-a="linkInfo">🔗 ' + (!D.link ? 'Link to a grown-up\'s phone' : D.link.lost ? 'Not linked right now' : 'Linked with your grown-up') + '</button></div>';
     return h + '<div style="margin-top:16px">' + disclaimer + '</div>' + logo;
   };
 
@@ -260,7 +295,7 @@
       C.COLOURS.map(c => '<button class="colour" style="background:' + c.hex + '" data-a="checkin" data-v="' + c.id + '">' + esc(simpleWords(k) ? c.little : c.name + ': ' + c.word) + (!simpleWords(k) ? '<small>' + esc(c.sub) + '</small>' : '') + '</button>').join('') + '</div>');
   };
   VIEWS.checkin2 = function (k) {
-    const e = k.checkins[ST.ci]; if (!e) return VIEWS.checkin(k);
+    const e = ciNow(); if (!e) return VIEWS.checkin(k);
     const c = C.COLOURS.find(x => x.id === e.c);
     const msg = { blue: 'Feeling low is OK. Go gently.', green: 'Lovely. Enjoy it!', yellow: 'Feeling wobbly is OK. Something here might help.', red: 'Everything feels like too much. That\'s OK. ' + soft(k, 'Let\'s get calmer.', 'Take all the time you need.') }[e.c];
     let h = '<div class="card" style="background:' + c.soft + ';border-color:' + c.hex + '"><h2 style="color:' + c.hex + '">' + esc(simpleWords(k) ? c.little : c.name + ': ' + c.word) + '</h2><p>' + esc(msg) + '</p>' + sayBtn(k, msg) + '</div>';
@@ -316,14 +351,14 @@
     }
     const got = r.stars.length, full = got >= r.target && r.goals.length;
     let h = backBtn('home', 'Home');
-    if (!r.goals.length) return h + card('<h2>' + esc(name) + '</h2><p>No goals yet. Pick 1 to 3 goals together, then earn stars towards a treat.</p><button data-a="rEdit">Choose goals (grown-up)</button>');
+    if (!r.goals.length) return h + card('<h2>' + esc(name) + '</h2>' + (isChild() ? '<p>No goals yet. You and your grown-up can choose some together.</p>' : '<p>No goals yet. Pick 1 to 3 goals together, then earn stars towards a treat.</p><button data-a="rEdit">Choose goals (grown-up)</button>'));
     h += card('<h2>' + esc(name) + '</h2><ul class="list">' + r.goals.map(g => '<li><span style="font-size:22px">🎯</span><span class="grow name">' + esc(g.text) + '</span><span class="muted no-grow">' + r.stars.filter(s => s.g === g.id).length + ' ⭐</span></li>').join('') + '</ul>' +
       '<div class="stars" aria-label="' + got + ' of ' + r.target + ' stars">' + Array.from({ length: r.target }, (_, i) => '<span class="' + (i < got ? 'on' : '') + '">' + (i < got ? '⭐' : '') + '</span>').join('') + '</div>' +
       '<p><b>' + got + ' of ' + r.target + '</b> stars' + (r.treat ? ' towards: <b>' + esc(r.treat) + '</b>' : '') + '</p>' +
-      (full ? '<div class="ok" style="text-align:center;font-size:1.2em">🎉 You did it! Treat time' + (r.treat ? ': ' + esc(r.treat) : '') + '!</div><div class="row" style="margin-top:10px"><button data-a="rNew">Start a new chart (grown-up)</button></div>'
-        : '<div class="row"><button data-a="addStar">⭐ Add a star (grown-up)</button></div>') +
+      (full ? '<div class="ok" style="text-align:center;font-size:1.2em">🎉 You did it! Treat time' + (r.treat ? ': ' + esc(r.treat) : '') + '!</div>' + gu('<div class="row" style="margin-top:10px"><button data-a="rNew">Start a new chart (grown-up)</button></div>')
+        : gu('<div class="row"><button data-a="addStar">⭐ Add a star (grown-up)</button></div>')) +
       '<p class="muted" style="margin-top:10px">Stars are never taken away.' + (r.rounds.length ? ' Treats earned so far: ' + r.rounds.length + '.' : '') + '</p>' +
-      '<button class="ghost" data-a="rEdit">Change goals or treat</button>');
+      gu('<button class="ghost" data-a="rEdit">Change goals or treat</button>'));
     return h;
   };
 
@@ -421,7 +456,7 @@
     const row = s => '<li><span style="font-size:30px">' + esc(s.emoji || '📖') + '</span><div class="grow"><div class="name">' + esc(s.title) + '</div><div class="muted">' + esc(sleeps(s.date) || 'No date') + '</div></div><button class="small" data-a="storyOpen" data-v="' + s.id + '">Read</button></li>';
     return backBtn('home', 'Home') + card('<h2>Coming up</h2><p class="muted">Short stories about new or worrying things, so you know what to expect.</p>' +
       (up.length ? '<ul class="list">' + up.map(row).join('') + '</ul>' : '<p>Nothing coming up yet.</p>') +
-      '<div class="row" style="margin-top:10px"><button class="light" data-a="storyNew">✏️ Write a story (grown-up)</button></div>') +
+      gu('<div class="row" style="margin-top:10px"><button class="light" data-a="storyNew">✏️ Write a story (grown-up)</button></div>')) +
       (past.length ? card('<h2>Already happened</h2><ul class="list">' + past.map(row).join('') + '</ul>') : '');
   };
   VIEWS.story = function (k) {
@@ -432,7 +467,7 @@
       '<div class="story-step">' + (last ? '🎉<br>' : '') + esc(text) + '</div><p class="muted" style="text-align:center">' + (last ? '' : 'Page ' + (n + 1) + ' of ' + s.steps.length) + '</p>' +
       '<div style="text-align:center">' + sayBtn(k, text) + '</div>' +
       '<div class="row" style="margin-top:10px"><button class="light" data-a="sPrev"' + (n ? '' : ' disabled') + '>‹ Back</button>' + (last ? '<button data-a="sPrev" data-v="restart">Read again</button>' : '<button data-a="sNext">Next ›</button>') + '</div>') +
-      '<div class="row"><button class="ghost no-grow" data-a="storyEdit" data-v="' + s.id + '">✏️ Change (grown-up)</button></div>';
+      gu('<div class="row"><button class="ghost no-grow" data-a="storyEdit" data-v="' + s.id + '">✏️ Change (grown-up)</button></div>');
   };
   VIEWS.storyEdit = function () {
     const s = ST.se;
@@ -450,7 +485,7 @@
     const list = allScenarios(k);
     return backBtn('home', 'Home') + card('<h2>What would you do?</h2><p class="muted">' + soft(k, 'Everyday moments. There are no wrong answers: tap each choice to see how other people might feel.', 'Everyday moments, with no right or wrong answers. Have a look at any choice to see how other people might feel.') + '</p><ul class="list">' +
       list.map(s => '<li><div class="grow"><div class="name">' + esc(s.title) + (s.mine ? ' <span class="tag">✏️ Ours</span>' : '') + '</div></div><button class="small light" data-a="scOpen" data-v="' + esc(s.id) + '">Open</button></li>').join('') + '</ul>' +
-      '<div class="row" style="margin-top:10px"><button class="light" data-a="scNew">✏️ Write your own (grown-up)</button></div>');
+      gu('<div class="row" style="margin-top:10px"><button class="light" data-a="scNew">✏️ Write your own (grown-up)</button></div>'));
   };
   VIEWS.scenario = function (k) {
     const list = allScenarios(k), i = list.findIndex(s => s.id === ST.sc), s = list[i]; if (!s) return VIEWS.scenarios(k);
@@ -463,7 +498,7 @@
     });
     if (s.tip && open.length) h += '<p class="note" style="margin-top:10px">💡 ' + esc(s.tip) + '</p>';
     const next = list[(i + 1) % list.length];
-    return backBtn('scenarios', 'All moments') + card(h) + '<div class="row">' + (s.mine ? '<button class="light" data-a="scEdit" data-v="' + esc(s.id) + '">✏️ Change (grown-up)</button>' : '') + '<button data-a="scOpen" data-v="' + esc(next.id) + '">Next one ›</button></div>';
+    return backBtn('scenarios', 'All moments') + card(h) + '<div class="row">' + (s.mine && !isChild() ? '<button class="light" data-a="scEdit" data-v="' + esc(s.id) + '">✏️ Change (grown-up)</button>' : '') + '<button data-a="scOpen" data-v="' + esc(next.id) + '">Next one ›</button></div>';
   };
   VIEWS.scEdit = function () {
     const s = ST.se;
@@ -480,8 +515,8 @@
   /* ---------- Hidden rules ---------- */
   VIEWS.rules = function (k) {
     return backBtn('home', 'Home') + card('<h2>' + esc(toolName(toolById('rules'), k)) + '</h2><p class="muted">Things lots of people expect without saying. You don\'t have to follow them all. It just helps to know they\'re there.</p>') +
-      allRules(k).map(r => card('<h3 style="margin-top:0">' + esc(r.title) + (r.mine ? ' <span class="tag">✏️ Ours</span>' : '') + '</h3><p>' + esc(r.text) + '</p><div class="row">' + sayBtn(k, r.title + '. ' + r.text) + (r.mine ? '<button class="small light no-grow" data-a="ruleDel" data-v="' + esc(r.id) + '">Delete (grown-up)</button>' : '') + '</div>')).join('') +
-      '<div class="row"><button class="light" data-a="ruleNew">✏️ Write your own (grown-up)</button></div>';
+      allRules(k).map(r => card('<h3 style="margin-top:0">' + esc(r.title) + (r.mine ? ' <span class="tag">✏️ Ours</span>' : '') + '</h3><p>' + esc(r.text) + '</p><div class="row">' + sayBtn(k, r.title + '. ' + r.text) + (r.mine && !isChild() ? '<button class="small light no-grow" data-a="ruleDel" data-v="' + esc(r.id) + '">Delete (grown-up)</button>' : '') + '</div>')).join('') +
+      gu('<div class="row"><button class="light" data-a="ruleNew">✏️ Write your own (grown-up)</button></div>');
   };
   VIEWS.ruleEdit = function () {
     return backBtn('rules', 'Cancel') + card('<h2>Write a hidden rule</h2><label class="lab">Title</label><input type="text" maxlength="60" data-f="s.se.title" placeholder="e.g. At Granny\'s house">' +
@@ -502,7 +537,7 @@
   /* ---------- My wins ---------- */
   VIEWS.wins = function (k) {
     const wins = k.diary.filter(e => e.type === 'good' && !e.hideKid).slice(0, 60);
-    return backBtn('home', 'Home') + card('<h2>🏆 My wins</h2><p class="muted">Good moments to remember. Grown-ups can add them too.</p><div class="row"><input type="text" maxlength="120" data-f="s.win" placeholder="Something that went well"><button class="no-grow" data-a="addWin">Add</button></div>') +
+    return backBtn('home', 'Home') + card('<h2>🏆 My wins</h2><p class="muted">Good moments to remember. ' + (isChild() && D.link ? 'Your grown-up sees the ones you add, and can add some too.' : 'Grown-ups can add them too.') + '</p><div class="row"><input type="text" maxlength="120" data-f="s.win" placeholder="Something that went well"><button class="no-grow" data-a="addWin">Add</button></div>') +
       (wins.length ? wins.map(e => card('<div class="row"><span class="no-grow" style="font-size:26px">⭐</span><div><div class="name"><b>' + esc([].concat(e.good || []).join(', ') || e.what || e.note) + '</b></div>' +
         ((e.good || []).length && (e.note || e.what) ? '<p>' + esc(e.note || e.what) + '</p>' : '') + '<p class="muted">' + esc(day(e.t)) + '</p></div></div>')).join('') : '<p class="muted">No wins saved yet. They\'ll show up here.</p>');
   };
@@ -519,7 +554,7 @@
         '<div class="chips">' + [[4, 'Thin'], [8, 'Medium'], [18, 'Thick']].map(([v, l]) => '<button class="chip size' + (ST.size === v ? ' on' : '') + '" data-a="penSize" data-v="' + v + '">' + l + '</button>').join('') + '</div>' +
         '<div class="row" style="margin-top:8px"><button class="light" data-a="padUndo">↶ Undo</button><button class="light" data-a="padClear">Clear</button><button data-a="padSave">Save</button></div>');
     }
-    return backBtn('home', 'Home') + card('<h2>🖍️ ' + esc(toolName(toolById('draw'), k)) + '</h2><p class="muted">Draw how you feel, or anything you like. Drawings stay on this phone.</p><button data-a="padNew">New drawing</button>') +
+    return backBtn('home', 'Home') + card('<h2>🖍️ ' + esc(toolName(toolById('draw'), k)) + '</h2><p class="muted">Draw how you feel, or anything you like. Drawings stay on this device. They\'re never sent anywhere.</p><button data-a="padNew">New drawing</button>') +
       (k.drawings.length ? card('<div class="gallery">' + k.drawings.map((d, i) => '<button data-a="drawShow" data-v="' + i + '"><img src="' + d.img + '" alt="Drawing from ' + esc(day(d.t)) + '">' + (d.c ? '<i style="background:' + (C.COLOURS.find(c => c.id === d.c) || {}).hex + '"></i>' : '') + '</button>').join('') + '</div>') : '');
   };
   function initPad() {
@@ -546,7 +581,7 @@
 
   /* ---------- My notes (private) ---------- */
   VIEWS.notes = function (k) {
-    return backBtn('home', 'Home') + card('<h2>📓 My notes</h2><p class="muted">Just for you. They aren\'t shown in the grown-ups\' area or in any summary. (Anyone who opens this screen on this phone could read them, though.)</p>' +
+    return backBtn('home', 'Home') + card('<h2>📓 My notes</h2><p class="muted">Just for you. They stay on this device and are never sent anywhere, not even to a linked phone. (Anyone who opens this screen on this device could read them, though.)</p>' +
       '<textarea data-f="s.note" maxlength="2000" placeholder="Write anything…"></textarea><div class="row" style="margin-top:8px"><button data-a="addNote">Save note</button></div>') +
       k.notes.map((n, i) => card('<p class="muted">' + esc(day(n.t) + ', ' + time(n.t)) + '</p><p class="entry"><span class="what">' + esc(n.text) + '</span></p><button class="small light" data-a="delNote" data-v="' + i + '">Delete</button>')).join('');
   };
@@ -612,6 +647,206 @@
       '<div class="row"><button class="light" data-a="cStep" data-v="-1"' + (n ? '' : ' disabled') + '>‹ Back</button><button data-a="cStep" data-v="1" style="background:#5b7d8a"' + (n >= steps.length - 1 ? ' disabled' : '') + '>Next ›</button></div></div>';
   }
 
+  /* =====================================================================
+     LINKED DEVICES: what each side shares, scrambled by sync.js before it leaves the phone.
+     Parent to child (box "p"): the child's settings and everything a grown-up makes for them.
+     Child to parent (box "c"): check-ins, social battery and wins they add (plus All about me and
+     their picture if they change them). The diary, notes and drawings are never in either box.
+     ===================================================================== */
+  const OS = window.OC_SYNC;
+  const SY = { stops: [], timer: null, sent: {}, gotC: false, err: '', pairing: null };
+  const KID_SHARED = ['name', 'emoji', 'age', 'theme', 'hard', 'tools', 'readAloud', 'sounds', 'calmer', 'grown', 'big', 'easy', 'pda', 'simple', 'calm', 'plan', 'reward', 'stories', 'custom'];
+  const fresh = x => x.u || x.t || 0;
+  // Joins two lists, keeping the newer copy of anything in both
+  function joinList(a, b, key) {
+    const m = new Map(); (a || []).forEach(x => m.set(key(x), x));
+    (b || []).forEach(x => { const l = m.get(key(x)); if (!l || fresh(x) > fresh(l)) m.set(key(x), x); });
+    return [...m.values()].sort((x, y) => y.t - x.t);
+  }
+  function parentBox(k) {
+    const kid = { id: k.id }; KID_SHARED.forEach(f => { kid[f] = k[f]; });
+    kid.photo = k.photo; kid.photoAt = k.photoAt; kid.passport = k.passport;
+    const wins = k.diary.filter(e => e.type === 'good' && !e.hideKid && e.by !== 'child').slice(0, 100).map(e => ({ id: e.id, t: e.t, good: e.good || [], note: e.note || e.what || '' }));
+    return { v: 1, kid, wins };
+  }
+  function childBox(k) {
+    return { v: 1, checkins: k.checkins.slice(0, 400), battery: k.battery.slice(0, 400), wins: k.diary.filter(e => e.by === 'child').slice(0, 200),
+      photo: k.photo, photoAt: k.photoAt, passport: k.passport, hi: (D.link && D.link.hi) || '' };
+  }
+  // Picture and All about me can be changed on either side: the newest change wins
+  function takeNewer(k, b) {
+    if (b.photoAt > (k.photoAt || 0)) { k.photo = b.photo || ''; k.photoAt = b.photoAt; }
+    if (b.passport && (b.passport.at || 0) > (k.passport.at || 0)) k.passport = b.passport;
+  }
+  // On the child's device: the parent's box arrives
+  function fromParent(b) {
+    const k = K(); if (!k || !b || !b.kid || b.kid.id !== k.id) return;
+    KID_SHARED.forEach(f => { if (b.kid[f] !== undefined) k[f] = b.kid[f]; });
+    takeNewer(k, b.kid);
+    k.diary = k.diary.filter(e => e.by === 'child').concat((b.wins || []).map(w => Object.assign({ type: 'good', from: 'p', ticks: [] }, w))).sort((x, y) => y.t - x.t);
+    fixKid(k);
+    if (D.link) { D.link.lost = false; D.link.seen = Date.now(); }
+    save(); safeRender();
+  }
+  // On the child's device: the shared child box, maybe written by their other device (phone and tablet)
+  function fromSibling(b) {
+    const k = K(); if (!k) return;
+    if (b) {
+      k.checkins = joinList(k.checkins, b.checkins, x => x.t);
+      k.battery = joinList(k.battery, b.battery, x => x.t);
+      k.diary = joinList(k.diary.filter(e => e.by === 'child'), b.wins, x => x.id).concat(k.diary.filter(e => e.by !== 'child')).sort((x, y) => y.t - x.t);
+      takeNewer(k, b);
+      SY.sent.c = JSON.stringify(b); // only send again if this device has something new
+    }
+    SY.gotC = true; save(); safeRender();
+  }
+  // On the parent's phone: a child's box arrives
+  function fromChild(id, b) {
+    const k = D.kids.find(x => x.id === id); if (!k || !k.link || !b) return;
+    k.checkins = joinList(k.checkins, b.checkins, x => x.t);
+    k.battery = joinList(k.battery, b.battery, x => x.t);
+    const gone = new Set(k.gone || []);
+    k.diary = joinList(k.diary, (b.wins || []).filter(w => !gone.has(w.id)).map(w => Object.assign({}, w, { by: 'child' })), x => x.id);
+    takeNewer(k, b);
+    k.link.seen = Date.now();
+    if (SY.pairing && SY.pairing.kid === id && b.hi === SY.pairing.code) pairDone(k);
+    save(); safeRender();
+  }
+  function syncStop() { SY.stops.forEach(f => { try { f(); } catch (e) {} }); SY.stops = []; }
+  function syncStart() {
+    syncStop(); if (!OS) return;
+    const oops = e => { SY.err = navigator.onLine === false ? 'Offline. Changes will be sent when you\'re back online.' : 'Couldn\'t reach the sync server just now. It will keep trying.'; if (LOCALHOST) console.warn('sync', e); };
+    if (isParent()) D.kids.filter(k => k.link).forEach(k => SY.stops.push(OS.watch(k.link.key, 'c', b => { SY.err = ''; fromChild(k.id, b); }, oops)));
+    if (isChild() && D.link) {
+      SY.gotC = false;
+      SY.stops.push(OS.watch(D.link.key, 'p', (b, there) => { SY.err = ''; if (there) fromParent(b); else if (D.link && !D.link.lost) { D.link.lost = true; save(); safeRender(); } }, oops));
+      SY.stops.push(OS.watch(D.link.key, 'c', b => fromSibling(b), oops));
+    }
+    syncSoon();
+  }
+  function syncSoon() { clearTimeout(SY.timer); SY.timer = setTimeout(syncPush, 1200); }
+  async function syncPush() {
+    if (!OS) return;
+    const jobs = [];
+    if (isParent()) D.kids.filter(k => k.link).forEach(k => jobs.push([k.link.key, 'p', k.id + 'p', parentBox(k)]));
+    if (isChild() && D.link && !D.link.lost && SY.gotC && K()) jobs.push([D.link.key, 'c', 'c', childBox(K())]);
+    for (const [key, which, tag, box] of jobs) {
+      const s = JSON.stringify(box); if (SY.sent[tag] === s) continue;
+      try { await OS.write(key, which, box); SY.sent[tag] = s; SY.err = ''; }
+      catch (e) { SY.err = String(e && e.message) === 'too-big' ? 'Too much to send: try a smaller picture, or fewer or shorter stories.' : 'Couldn\'t send changes just now. It will try again.'; if (LOCALHOST) console.warn('sync', e); }
+    }
+  }
+  window.addEventListener('online', () => { SY.sent = isChild() ? { c: SY.sent.c } : {}; syncPush(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) syncPush(); });
+
+  /* ---------- Parent: show the code for a child's device ---------- */
+  const baseUrl = () => location.origin + location.pathname.replace(/[^/]*$/, '');
+  async function pairStart(again) {
+    const k = K();
+    if (again && SY.pairing && SY.pairing.kid === k.id) return pairSheet(k);
+    sheet('<h2>🔗 Getting the code ready…</h2><p class="muted">This needs the internet.</p>');
+    try {
+      if (!k.link) { k.link = { key: OS.newKey(), at: Date.now(), seen: 0 }; save(); }
+      await OS.write(k.link.key, 'p', parentBox(k)); SY.sent[k.id + 'p'] = JSON.stringify(parentBox(k));
+      const code = OS.newCode();
+      await OS.offer(code, { key: k.link.key, kid: k.id });
+      if (!window.qrcode) await loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js');
+      SY.pairing = { kid: k.id, code, url: baseUrl() + '#link=' + k.link.key + '.' + k.id + '.' + code };
+      syncStart(); used('link-started'); pairSheet(k);
+    } catch (e) {
+      if (LOCALHOST) console.warn(e);
+      sheet('<h2>Couldn\'t get a code just now</h2><p>Linking needs the internet on this phone. Please try again in a moment.</p><button data-a="closeLayer">OK</button>');
+    }
+  }
+  function pairSheet(k) {
+    const p = SY.pairing, qr = window.qrcode(0, 'M'); qr.addData(p.url); qr.make();
+    sheet('<h2>🔗 Link ' + esc(k.name) + '\'s device</h2><p>On ' + esc(k.name) + '\'s phone or tablet, open Our Compass and choose <b>My child\'s</b>. Then scan this code, or type the letters.</p>' +
+      '<div style="background:#fff;padding:12px;border-radius:12px;max-width:300px;margin:0 auto">' + qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true }) + '</div>' +
+      '<div class="code" aria-label="Code ' + p.code.split('').join(' ') + '">' + p.code.slice(0, 4) + ' ' + p.code.slice(4) + '</div>' +
+      '<p class="muted" style="text-align:center">The letters work for 15 minutes. Only show this code to your child\'s device: it\'s the key to what you share.</p>' +
+      '<p id="pairMsg" class="ok" role="status" style="text-align:center">Waiting for ' + esc(k.name) + '\'s device…</p><button class="light" data-a="pairClose" style="width:100%">Close</button>');
+  }
+  function pairDone(k) {
+    const code = SY.pairing.code; SY.pairing = null; OS.cancelOffer(code); used('link-done');
+    const m = $('pairMsg');
+    if (m) { m.textContent = '✅ Linked! ' + k.name + '\'s device is ready.'; const b = m.nextElementSibling; if (b) b.textContent = 'Done'; }
+    else toast('✅ ' + k.name + '\'s device is linked.');
+  }
+
+  /* ---------- Child's device: scan or type the code ---------- */
+  VIEWS.linkMe = function (k, inSetup) {
+    return card('<h2>🔗 Link to a grown-up\'s phone</h2>' +
+      '<p>On the grown-up\'s phone, open Our Compass, go to <b>📱 Devices</b> and tap <b>Link a device</b>. A code shows up there.</p>' +
+      '<div class="row" style="margin-top:10px"><button data-a="scan">📷 Scan the code</button></div>' +
+      '<label class="lab" for="codeIn">Or type the 8 letters</label><form id="codeForm" class="row" autocomplete="off"><input id="codeIn" class="code-in" type="text" maxlength="9" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="ABCD EFGH"><button class="no-grow" type="submit">Link</button></form>' +
+      '<p id="linkMsg" class="muted" role="status"></p>' +
+      '<p class="muted">After linking, this device shows only the child\'s tools. Notes and drawings made here stay here.</p>' +
+      '<div class="row" style="margin-top:12px"><button class="light no-grow" data-a="' + (inSetup ? 'wBack' : 'nav') + '" data-v="home">Back</button></div>');
+  };
+  let scanS = null;
+  function scanStop() { if (scanS) { scanS.getTracks().forEach(t => t.stop()); scanS = null; } }
+  async function scan() {
+    sheet('<h2>📷 Scan the code</h2><video id="scanV" class="scan" playsinline muted autoplay></video><p id="scanMsg" class="muted" role="status" style="text-align:center">Point the camera at the code on the grown-up\'s phone.</p><button class="light" data-a="closeLayer" style="width:100%">Cancel</button>');
+    const msg = t => { const m = $('scanMsg'); if (m) m.textContent = t; };
+    try { scanS = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); }
+    catch (e) { msg('The camera didn\'t open. You can type the letters instead.'); return; }
+    const v = $('scanV'); if (!v) return scanStop();
+    v.srcObject = scanS; try { await v.play(); } catch (e) {}
+    let det = null;
+    try { if ('BarcodeDetector' in window && (await BarcodeDetector.getSupportedFormats()).includes('qr_code')) det = new BarcodeDetector({ formats: ['qr_code'] }); } catch (e) {}
+    if (!det && !window.jsQR) { try { await loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'); } catch (e) { msg('The scanner needs the internet. You can type the letters instead.'); return; } }
+    const cv = document.createElement('canvas'), g = cv.getContext('2d', { willReadFrequently: true });
+    const tick = async () => {
+      if (!scanS || !document.body.contains(v)) return scanStop();
+      let text = '';
+      try {
+        if (det) { const r = await det.detect(v); text = r[0] ? r[0].rawValue : ''; }
+        else if (v.videoWidth) { const s = Math.min(1, 640 / v.videoWidth); cv.width = v.videoWidth * s; cv.height = v.videoHeight * s; g.drawImage(v, 0, 0, cv.width, cv.height); const r = window.jsQR(g.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height); text = r ? r.data : ''; }
+      } catch (e) {}
+      const m = /#link=([A-Za-z0-9_-]{40,})\.([a-z0-9]+)(?:\.([A-Z0-9]+))?/.exec(text);
+      if (m) { scanStop(); closeLayer(); linkWith(m[1], m[2], m[3] || ''); return; }
+      if (text) msg('That isn\'t an Our Compass code. Try the one on the grown-up\'s phone.');
+      setTimeout(tick, 250);
+    };
+    tick();
+  }
+  const linkMsg = t => { const m = $('linkMsg'); if (m) m.textContent = t; else toast(t); };
+  async function linkCode(raw) {
+    const code = OS.cleanCode(raw);
+    if (code.length !== 8) return linkMsg('The code is 8 letters. Have another look at the grown-up\'s phone.');
+    linkMsg('Linking…');
+    try {
+      const info = await OS.claim(code);
+      if (!info) return linkMsg('That code didn\'t work. Codes last 15 minutes, so the grown-up can make a new one.');
+      linkWith(info.key, info.kid, code);
+    } catch (e) { if (LOCALHOST) console.warn(e); linkMsg('Couldn\'t link just now. Linking needs the internet. Please try again.'); }
+  }
+  async function linkWith(key, kidId, hi) {
+    if (isParent()) { toast('This is a parent\'s phone. Scan the code on your child\'s device instead.'); return; }
+    linkMsg('Linking…');
+    let b = null;
+    try { b = await OS.read(key, 'p'); } catch (e) { if (LOCALHOST) console.warn(e); }
+    if (!b || !b.kid || b.kid.id !== kidId) return linkMsg('Couldn\'t link just now. Check both devices have the internet, then try again.');
+    const old = D.kids.find(x => x.id === kidId) || (D.kids.length === 1 ? D.kids[0] : null);
+    const k = fixKid(Object.assign(newKid(), clone(b.kid)));
+    if (old) {
+      ['notes', 'drawings', 'cards', 'today', 'ft'].forEach(f => { k[f] = old[f]; });
+      if (old.id === kidId) { k.checkins = old.checkins; k.battery = old.battery; k.diary = old.diary.filter(e => e.by === 'child'); }
+    }
+    D.role = 'child'; D.kids = [k]; D.cur = k.id; D.pro = ''; D.setupDone = true; W = null;
+    D.link = { key, kid: k.id, at: Date.now(), seen: Date.now(), hi: hi || '', lost: false };
+    fromParent(b);
+    SY.sent = {}; save(); syncStart();
+    used('linked-child-device'); V = 'home'; render(); window.scrollTo(0, 0);
+    toast('🔗 Linked with your grown-up\'s phone.');
+  }
+  // A code scanned with the phone's own camera opens the website with the key after "#" (never sent to a server)
+  function linkFromAddress() {
+    const m = /#link=([A-Za-z0-9_-]{40,})\.([a-z0-9]+)(?:\.([A-Z0-9]+))?/.exec(location.hash); if (!m) return;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    setTimeout(() => linkWith(m[1], m[2], m[3] || ''), 300);
+  }
+
   /* ---------- Grown-ups' lock screen ---------- */
   VIEWS.lock = function () {
     const [a, b] = ST.sum || [7, 6];
@@ -622,14 +857,39 @@
   };
 
   /* ---------- Grown-ups' area ---------- */
-  const PTABS = [['diary', '📝 Diary'], ['patterns', '🔍 Patterns'], ['summary', '📄 Summary'], ['plan', '🆘 Too-much plan'], ['settings', '⚙️ Settings']];
+  const PTABS = [['diary', '📝 Diary'], ['patterns', '🔍 Patterns'], ['summary', '📄 Summary'], ['plan', '🆘 Too-much plan'], ['devices', '📱 Devices'], ['settings', '⚙️ Settings']];
   VIEWS.grown = function (k) {
-    if (!unlocked()) { setTimeout(() => requireGrown(() => go('grown', true)), 0); return ''; }
+    if (isChild()) { setTimeout(() => go('home'), 0); return ''; }
+    if (!isParent() && !unlocked()) { setTimeout(() => requireGrown(() => go('grown', true)), 0); return ''; }
     const t = ST.ptab || 'diary';
-    return '<div class="row" style="margin-bottom:10px"><b class="no-grow">👪 Grown-ups: ' + esc(k.emoji + ' ' + k.name) + '</b><span></span><button class="small light no-grow" data-a="crisis">🆘 Too much now</button><button class="small light no-grow" data-a="lockNow" aria-label="Lock">🔒</button></div>' +
+    return (isParent() ? '' : whoseCard()) +
+      '<div class="row" style="margin-bottom:10px"><b class="no-grow">👪 ' + (isParent() ? '' : 'Grown-ups: ') + esc(k.emoji + ' ' + k.name) + '</b><span></span><button class="small light no-grow" data-a="crisis">🆘 Too much now</button>' + (isParent() ? '' : '<button class="small light no-grow" data-a="lockNow" aria-label="Lock">🔒</button>') + '</div>' +
       '<div class="tabs" role="tablist">' + PTABS.map(([id, l]) => '<button role="tab" aria-selected="' + (t === id) + '" class="' + (t === id ? 'on' : '') + '" data-a="ptab" data-v="' + id + '">' + l + '</button>').join('') + '</div>' +
-      ({ diary: gDiary, patterns: gPatterns, summary: gSummary, plan: gPlan, settings: gSettings }[t])(k);
+      ({ diary: gDiary, patterns: gPatterns, summary: gSummary, plan: gPlan, devices: gDevices, settings: gSettings }[t])(k);
   };
+  // Shown once on a phone that was set up before the parent and child versions
+  function whoseCard() {
+    return card('<h2>New: a parent version and a child version</h2><p>Your diary can now stay on your own phone, and your child\'s phone or tablet shows only their tools. Whose device is this?</p>' +
+      '<div class="row"><button data-a="whose" data-v="parent">👪 Mine (parent or carer)</button><button class="light" data-a="whose" data-v="child">🧒 My child\'s</button></div>', 'warn');
+  }
+
+  /* Devices: linking a child's own phone or tablet */
+  function gDevices(k) {
+    const L = k.link, P = SY.pairing && SY.pairing.kid === k.id;
+    let h = card('<h2>📱 ' + esc(k.name) + '\'s own phone or tablet</h2>' +
+      (L ? '<p class="ok">✅ Linked' + (L.seen ? '. Last heard from ' + esc(day(L.seen) + ', ' + time(L.seen)) : '. Waiting to hear from their device') + '.</p>'
+        : '<p>Link ' + esc(k.name) + '\'s device to show only their tools there. What they share comes to you here, and what you change here goes to them.</p>') +
+      (SY.err ? '<p class="note">⚠️ ' + esc(SY.err) + '</p>' : '') +
+      '<div class="row" style="margin-top:10px"><button data-a="pairStart">' + (L ? '+ Link another device (e.g. their tablet)' : '🔗 Link a device') + '</button>' + (L ? '<button class="light no-grow" data-a="unlink">Unlink</button>' : '') + '</div>' +
+      (P ? '<p class="muted">The linking code is still open. <button class="small light" data-a="pairStart" data-v="again">Show it again</button></p>' : ''));
+    h += card('<h2>What\'s shared</h2><ul>' +
+      '<li><b>To ' + esc(k.name) + '\'s device:</b> their tools, theme and look, star chart, Coming up stories, your own moments and hidden rules, All about me, calm ideas, the too-much plan, and good moments you choose to show in "My wins".</li>' +
+      '<li><b>From ' + esc(k.name) + '\'s device:</b> check-ins, social battery, and wins they add. If they change All about me or their picture, that comes back too.</li>' +
+      '<li><b>Never shared:</b> your diary, patterns and summary, and ' + esc(k.name) + '\'s private notes and drawings.</li></ul>' +
+      '<p class="ok">🔒 Everything shared is scrambled (encrypted) on the phone before it\'s sent. Only your linked devices have the key, so nobody else can read it, not even us.</p>' +
+      '<p class="muted">Changes show up on the other device within a few seconds when both are online. Their device has no grown-ups\' area and no settings: you change things from here.</p>');
+    return h;
+  }
 
   /* Diary */
   const tickEmoji = id => (C.TICKS.find(t => t[0] === id) || ['', ''])[1];
@@ -809,11 +1069,11 @@
     h += card('<h2>Calm ideas for each colour</h2><p class="muted">Shown after a check-in. Choose them together: one idea per line.</p>' +
       C.COLOURS.map(c => '<label class="lab" style="color:' + c.hex + '">' + c.name + ': ' + c.word + '</label><textarea data-f="kl.calm.' + c.id + '">' + esc(k.calm[c.id].join('\n')) + '</textarea>').join(''));
     h += card('<h2>Family</h2><label class="lab">Professional\'s name (optional)</label><p class="muted">Only shown on the printed or shared summary.</p><input type="text" maxlength="60" data-f="d.pro" value="' + esc(D.pro) + '" placeholder="e.g. Dr Byrne, CAMHS">');
-    h += card('<h2>💾 Backup, and sharing with another parent or carer</h2><p class="muted">Everything lives only on this phone. Save a backup now and then. To share with another parent or carer, send them the backup file and they load it in Our Compass on their phone. (The website and the Android app keep separate copies.)</p>' +
+    h += card('<h2>💾 Backup, and sharing with another parent or carer</h2><p class="muted">Your diary lives only on this phone. Save a backup now and then. To share with another parent or carer, send them the backup file and they load it in Our Compass on their phone. (The website and the Android app keep separate copies.)</p>' +
       '<div class="row"><button class="light" data-a="backup">Save backup</button><button class="light" data-a="restore">Load backup</button></div><input type="file" id="restoreIn" accept=".json,application/json" class="hidden"><p id="backupMsg" class="muted" role="status"></p>');
     h += card('<h2>💬 Is this useful?</h2><p class="muted">Tell the maker what helps, what doesn\'t, or what\'s missing. Please don\'t include your child\'s name.</p><button class="light" data-a="feedback">Send feedback</button>');
-    h += card('<h2>About</h2>' + disclaimer + '<p><a href="privacy.html">Privacy: everything stays on this phone</a></p>' +
-      '<div class="row" style="margin-top:10px"><button class="light" data-a="lockNow">🔒 Lock the grown-ups\' area</button><button class="light" data-a="delKid" style="color:#a2453d">Remove ' + esc(k.name) + '</button></div>');
+    h += card('<h2>About</h2>' + disclaimer + '<p><a href="privacy.html">Privacy: what stays on this phone, and what linked devices share</a></p>' +
+      '<div class="row" style="margin-top:10px">' + (isParent() ? '' : '<button class="light" data-a="lockNow">🔒 Lock the grown-ups\' area</button>') + '<button class="light" data-a="delKid" style="color:#a2453d">Remove ' + esc(k.name) + '</button></div>');
     return h + logo;
   }
 
@@ -821,8 +1081,9 @@
      ACTIONS
      ===================================================================== */
   const ACT = {
-    nav: v => { if (v === 'grown') return requireGrown(() => go('grown')); if (v === 'passport') used('passport'); go(v); },
+    nav: v => { if (v === 'grown') return isChild() ? go('home') : requireGrown(() => go('grown')); if (v === 'passport') used('passport'); go(v); },
     kids: () => {
+      if (isChild()) return ACT.linkInfo();
       sheet('<h2>Who\'s using it?</h2><ul class="list">' + D.kids.map(x => '<li><span style="font-size:30px">' + face(x, 36) + '</span><span class="grow name">' + esc(x.name) + '</span>' + (x.id === D.cur ? '<span class="tag">Now</span>' : '<button class="small" data-a="switchKid" data-v="' + x.id + '">Switch</button>') + '</li>').join('') + '</ul>' +
         '<div class="row" style="margin-top:10px"><button class="light" data-a="addKid">+ Add a child (grown-up)</button></div>');
     },
@@ -839,19 +1100,52 @@
       if (W.step === 3 && W.adding) { W.step = 5; } else W.step++;
       render(); window.scrollTo(0, 0);
     },
-    wBack: () => { W.step = W.step === 5 && W.adding ? 3 : W.step - 1; render(); },
-    wCancel: () => { W = null; if (unlocked()) { V = 'grown'; ST.ptab = 'settings'; } else V = 'home'; render(); },
+    wBack: () => { W.step = W.step === 'link' ? 0 : W.step === 5 && W.adding ? 3 : W.step - 1; render(); },
+    wRole: v => { if (v === 'child') { W.step = 'link'; } else { D.role = 'parent'; W.step = 1; } render(); window.scrollTo(0, 0); },
+
+    /* linked devices */
+    whose: v => {
+      if (v === 'parent') { D.role = 'parent'; save(); syncStart(); toast('This is your phone now: no more sums.'); go('grown'); return; }
+      sheet('<h2>Make this ' + esc(K().name) + '\'s device?</h2><p>This removes your diary, patterns and summary from this device, so ' + esc(K().name) + ' can\'t read them here. Their tools, check-ins, notes and drawings stay.</p>' +
+        '<p><b>To keep your diary:</b> first tap <b>Save backup</b>, then on your own phone set up Our Compass as a parent and load the backup there. Then link this device from your phone.</p>' +
+        '<div class="row"><button class="light" data-a="backup">Save backup</button></div><p id="backupMsg" class="muted" role="status"></p>' +
+        '<div class="row" style="margin-top:10px"><button class="light" data-a="closeLayer">Cancel</button><button data-a="makeChild">Make it ' + esc(K().name) + '\'s</button></div>');
+    },
+    makeChild: () => {
+      D.kids.forEach(k => { k.diary = k.diary.filter(e => e.by === 'child'); k.link = null; k.gone = []; });
+      D.pro = ''; D.role = 'child'; D.link = null; lockUntil = 0; save(); closeLayer(); used('made-child-device');
+      V = 'linkMe'; render(); window.scrollTo(0, 0);
+    },
+    linkInfo: () => {
+      const L = D.link;
+      sheet('<h2>🔗 ' + (!L ? 'Not linked yet' : L.lost ? 'Not linked right now' : 'Linked with your grown-up') + '</h2>' +
+        (L && !L.lost ? '<p>Your check-ins, social battery and wins go to your grown-up\'s phone. Your tools and stories come from there.' + (L.seen ? ' Last update: ' + esc(day(L.seen) + ', ' + time(L.seen)) + '.' : '') + '</p>' : '<p>Your grown-up can link this device from their phone.</p>') +
+        '<p class="ok">📓 Your notes and drawings stay on this device. They\'re never sent anywhere.</p>' +
+        '<p class="muted">Everything that\'s shared is scrambled first, so only your family\'s linked devices can read it.</p>' +
+        '<div class="row"><button class="light" data-a="relink">' + (L ? 'Link again' : 'Link now') + '</button><button data-a="closeLayer">Close</button></div>');
+    },
+    relink: () => { closeLayer(); go('linkMe'); },
+    scan: () => scan(),
+    pairStart: v => pairStart(v === 'again'),
+    pairClose: () => { closeLayer(); if (V === 'grown') render(); },
+    unlink: async () => {
+      const k = K();
+      if (!k.link || !confirm('Unlink ' + k.name + '\'s devices? They keep what they have now, but nothing more is shared until you link again.')) return;
+      const key = k.link.key; k.link = null; save(); syncStart(); render();
+      try { await OS.remove(key, 'p'); await OS.remove(key, 'c'); toast('Unlinked.'); } catch (e) { toast('Unlinked here. (The other device will notice when it\'s online.)'); }
+    },
+    wCancel: () => { W = null; if (isParent() || unlocked()) { V = 'grown'; ST.ptab = 'settings'; } else V = 'home'; render(); },
     wEmoji: v => { W.kid.emoji = v; render(); },
     wAge: v => { const k = W.kid; k.age = v; k.tools = defaultTools(v); k.grown = v === 'teen'; render(); },
     wHard: v => { const k = W.kid; k.hard = k.hard.includes(v) ? k.hard.filter(x => x !== v) : k.hard.concat(v); render(); },
     wTheme: v => { W.kid.theme = v; render(); },
     wAnother: () => { D.setupDone = true; save(); W = { step: 1, kid: newKid(), adding: true, more: true }; render(); },
-    wDone: () => { const wasAdding = W.adding; D.setupDone = true; W = null; save(); used(wasAdding ? 'child-added' : 'setup-done'); V = 'home'; render(); window.scrollTo(0, 0); },
+    wDone: () => { const wasAdding = W.adding; D.setupDone = true; W = null; save(); used(wasAdding ? 'child-added' : 'setup-done'); V = homeV(); if (isParent()) ST = { ptab: wasAdding ? 'settings' : 'devices' }; render(); window.scrollTo(0, 0); },
 
     /* check-in */
-    checkin: v => { const k = K(); k.checkins.unshift({ t: Date.now(), c: v, body: [], idea: '' }); save(); used('checkin-' + v); ST = { ci: 0 }; V = 'checkin2'; render(); window.scrollTo(0, 0); try { history.pushState({ oc: 1 }, ''); } catch (e) {} },
-    idea: v => { const e = K().checkins[ST.ci]; if (e) { e.idea = v; save(); render(); } },
-    bodyClue: v => { const e = K().checkins[ST.ci]; if (!e) return; e.body = e.body || []; e.body = e.body.includes(v) ? e.body.filter(x => x !== v) : e.body.concat(v); save(); render(); },
+    checkin: v => { const k = K(), t = Date.now(); k.checkins.unshift({ t, c: v, body: [], idea: '' }); save(); used('checkin-' + v); ST = { ci: t }; V = 'checkin2'; render(); window.scrollTo(0, 0); try { history.pushState({ oc: 1 }, ''); } catch (e) {} },
+    idea: v => { const e = ciNow(); if (e) { e.idea = v; e.u = Date.now(); save(); render(); } },
+    bodyClue: v => { const e = ciNow(); if (!e) return; e.body = e.body || []; e.u = Date.now(); e.body = e.body.includes(v) ? e.body.filter(x => x !== v) : e.body.concat(v); save(); render(); },
     pace: v => { ST.pace = +v; render(); },
 
     /* cards */
@@ -948,7 +1242,7 @@
     ruleDel: v => requireGrown(() => { if (!confirm('Delete this rule?')) return go('rules'); const k = K(); k.custom.rules = k.custom.rules.filter(x => x.id !== v); save(); go('rules'); }),
 
     /* drawing and pictures */
-    drawFor: () => { const e = K().checkins[ST.ci]; ST = { drawing: true, c: e ? e.c : '' }; V = 'draw'; render(); window.scrollTo(0, 0); used('drawing-started'); },
+    drawFor: () => { const e = ciNow(); ST = { drawing: true, c: e ? e.c : '' }; V = 'draw'; render(); window.scrollTo(0, 0); used('drawing-started'); },
     padNew: () => { ST = { drawing: true }; render(); used('drawing-started'); },
     pen: (v, el) => { ST.pen = v; document.querySelectorAll('.pen').forEach(b => b.classList.toggle('on', b === el)); },
     penSize: (v, el) => { ST.size = +v; document.querySelectorAll('.chip.size').forEach(b => b.classList.toggle('on', b === el)); },
@@ -965,10 +1259,10 @@
       sheet('<img src="' + d.img + '" alt="" style="width:100%;border-radius:12px;background:#fff"><p class="muted">' + esc(day(d.t) + ', ' + time(d.t)) + '</p>' +
         '<div class="row"><button class="light" data-a="drawAsPhoto" data-v="' + v + '">Use as my picture</button><button class="light" data-a="drawDel" data-v="' + v + '">Delete</button><button data-a="closeLayer">Close</button></div>');
     },
-    drawAsPhoto: v => { const d = K().drawings[+v]; if (!d) return; const im = new Image(); im.onload = () => { K().photo = shrink(im, 160, 160, true); save(); closeLayer(); render(); toast('That\'s your picture now.'); }; im.src = d.img; },
+    drawAsPhoto: v => { const d = K().drawings[+v]; if (!d) return; const im = new Image(); im.onload = () => { K().photo = shrink(im, 160, 160, true); K().photoAt = Date.now(); save(); closeLayer(); render(); toast('That\'s your picture now.'); }; im.src = d.img; },
     drawDel: v => { if (!confirm('Delete this drawing?')) return; K().drawings.splice(+v, 1); save(); closeLayer(); render(); },
     photo: v => { ST.photoFor = v; $('photoIn').click(); },
-    noPhoto: v => { const k = v === 'w' ? W.kid : K(); k.photo = ''; if (v !== 'w') save(); render(); },
+    noPhoto: v => { const k = v === 'w' ? W.kid : K(); k.photo = ''; k.photoAt = Date.now(); if (v !== 'w') save(); render(); },
 
     /* battery, wins, notes */
     bat: v => { K().battery.unshift({ t: Date.now(), v: +v }); save(); used('battery'); ST.bat = +v; render(); },
@@ -1025,7 +1319,11 @@
       const k = K(); k.diary.push(e); k.diary.sort((a, b) => b.t - a.t); save(); used('diary-' + F.type);
       ST = { ptab: 'diary' }; V = 'grown'; render(); toast('Saved.');
     },
-    dDel: v => { if (!confirm('Delete this diary entry?')) return; const k = K(); k.diary = k.diary.filter(e => e.id !== v); save(); render(); },
+    dDel: v => {
+      if (!confirm('Delete this diary entry?')) return; const k = K(), e = k.diary.find(x => x.id === v);
+      if (e && e.by === 'child') { k.gone = (k.gone || []).concat(v).slice(-300); } // so it doesn't come back from their device
+      k.diary = k.diary.filter(x => x.id !== v); save(); render();
+    },
     sumDays: v => { ST.sum2.days = +v; render(); },
     sumPrint: () => { used('summary-print'); printHTML(summaryHtml(K(), ST.sum2)); },
     sumShare: async () => {
@@ -1043,7 +1341,8 @@
     delKid: () => {
       const k = K();
       if (!confirm('Remove ' + k.name + ' and all their diary entries, check-ins and notes from this phone? This can\'t be undone. Save a backup first if you\'re not sure.')) return;
-      D.kids = D.kids.filter(x => x !== k); D.cur = D.kids[0] ? D.kids[0].id : '';
+      if (k.link && OS) { OS.remove(k.link.key, 'p').catch(() => {}); OS.remove(k.link.key, 'c').catch(() => {}); }
+      D.kids = D.kids.filter(x => x !== k); D.cur = D.kids[0] ? D.kids[0].id : ''; syncStart();
       if (!D.kids.length) { D.setupDone = false; W = { step: 1, kid: newKid(), adding: false }; }
       save(); ST = { ptab: 'settings' }; render();
     },
@@ -1059,10 +1358,11 @@
       $('backupMsg').textContent = 'Backup saved to your downloads.';
     },
     restore: () => $('restoreIn').click(),
-    restoreAll: () => { const v = ST.pending; if (!v) return; D = v; D.kids = D.kids.map(fixKid); D.setupDone = !!D.kids.length; if (!D.kids.find(k => k.id === D.cur)) D.cur = D.kids[0] ? D.kids[0].id : ''; save(); closeLayer(); ST = { ptab: 'settings' }; render(); toast('Backup loaded.'); },
+    restoreAll: () => { const v = ST.pending; if (!v) return; const role = D.role, links = {}; D.kids.forEach(k => { links[k.id] = k.link; }); D = v; D.role = role; D.link = null; D.kids = D.kids.map(fixKid); D.kids.forEach(k => { k.link = links[k.id] || null; }); syncStart(); D.setupDone = !!D.kids.length; if (!D.kids.find(k => k.id === D.cur)) D.cur = D.kids[0] ? D.kids[0].id : ''; save(); closeLayer(); ST = { ptab: 'settings' }; render(); toast('Backup loaded.'); },
     restoreMerge: () => {
       const v = ST.pending; if (!v) return;
-      v.kids.forEach(k => { k = fixKid(k); const i = D.kids.findIndex(x => x.id === k.id); if (i >= 0) D.kids[i] = k; else D.kids.push(k); });
+      // a backup never brings device links with it: each phone links its own devices
+      v.kids.forEach(k => { k = fixKid(k); const i = D.kids.findIndex(x => x.id === k.id); k.link = i >= 0 ? D.kids[i].link : null; if (i >= 0) D.kids[i] = k; else D.kids.push(k); });
       if (!D.pro && v.pro) D.pro = v.pro;
       save(); closeLayer(); ST = { ptab: 'settings' }; render(); toast('Children added or updated.');
     }
@@ -1089,6 +1389,7 @@
     const root = { k: K(), kl: K(), d: D, w: W && W.kid, s: ST, f: ST.F }[pre]; if (!root) return;
     if (pre === 'k' && path === 'name') val = val.slice(0, 24);
     setPath(root, path, val);
+    if (pre === 'k' && path.startsWith('passport.')) root.passport.at = Date.now();
     if ((pre === 'k' || pre === 'w') && path === 'pda' && val) { root.tools.timer = false; root.tools.reward = false; root.tools.firstthen = false; }
     if ((pre === 'k' || pre === 'w') && path === 'simple' && val && canSpeak()) root.readAloud = true;
     if (pre === 'k' || pre === 'kl' || pre === 'd') save();
@@ -1102,6 +1403,7 @@
     if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') onField(e);
   });
   document.addEventListener('submit', e => {
+    if (e.target.id === 'codeForm') { e.preventDefault(); linkCode($('codeIn').value); return; }
     if (e.target.id !== 'lockForm') return;
     e.preventDefault();
     const [a, b] = ST.sum || [0, 0], ans = parseInt($('lockIn').value, 10);
@@ -1111,7 +1413,7 @@
   function photoFile(input) {
     const file = input.files[0]; input.value = ''; if (!file) return;
     const url = URL.createObjectURL(file), im = new Image();
-    im.onload = () => { const k = ST.photoFor === 'w' && W ? W.kid : K(); k.photo = shrink(im, 160, 160, true); URL.revokeObjectURL(url); if (ST.photoFor !== 'w') save(); render(); };
+    im.onload = () => { const k = ST.photoFor === 'w' && W ? W.kid : K(); k.photo = shrink(im, 160, 160, true); k.photoAt = Date.now(); URL.revokeObjectURL(url); if (ST.photoFor !== 'w') save(); render(); };
     im.onerror = () => toast('That picture couldn\'t be opened.');
     im.src = url;
   }
@@ -1131,8 +1433,11 @@
 
   /* ---------- Start ---------- */
   if (D.kids.length && !D.kids.find(k => k.id === D.cur)) D.cur = D.kids[0].id;
+  V = homeV();
   render();
+  linkFromAddress();
+  syncStart();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
   // localhost-only test hook
-  if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) window.__oc = { get D() { return D; }, findPatterns: () => findPatterns(K()), passportLink: () => passportLink(K()), render, go, unlock: () => { lockUntil = Date.now() + 600000; } };
+  if (LOCALHOST) window.__oc = { get D() { return D; }, get SY() { return SY; }, findPatterns: () => findPatterns(K()), passportLink: () => passportLink(K()), render, go, save, linkCode, linkWith, syncPush, unlock: () => { lockUntil = Date.now() + 600000; } };
 })();

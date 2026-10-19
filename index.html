@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2f5968">
 <title>Our Compass</title>
-<meta name="description" content="A free, private toolkit for autistic children and their families: feelings check-in, calm corner, first/then, timers, everyday scenarios, a diary with patterns, and an All about me passport. Everything stays on your phone.">
+<meta name="description" content="A free, private toolkit for autistic children and their families: feelings check-in, calm corner, first/then, timers, everyday scenarios, a diary with patterns, and an All about me passport. Your diary stays on your phone, and a child's own device can be linked, with everything scrambled before it leaves the phone.">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -174,6 +174,10 @@
     #print .card{border:0;padding:0;margin:0}
     #print .bar i,#print .stack i{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
+  .code{font:700 2em/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.12em;text-align:center;margin:10px 0;color:var(--brand)}
+  input.code-in{font:700 1.5em ui-monospace,Menlo,Consolas,monospace;letter-spacing:.15em;text-align:center;text-transform:uppercase}
+  .scan{width:100%;max-width:360px;aspect-ratio:1;object-fit:cover;border-radius:14px;background:#000;display:block;margin:8px auto}
+  .link-note{margin-top:14px;text-align:center}
 </style>
 </head>
 <body>
@@ -184,14 +188,12 @@
 </header>
 <main id="app"></main>
 <nav id="nav">
-  <button data-a="nav" data-v="home"><b>🏠</b>Home</button>
-  <button data-a="nav" data-v="passport"><b>🪪</b>All about me</button>
-  <button data-a="nav" data-v="grown"><b>👪</b>Grown-ups</button>
 </nav>
 <div id="layer"></div>
 <div id="print"></div>
 <input type="file" id="photoIn" accept="image/*" class="hidden">
 <script src="content.js"></script>
+<script src="sync.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
