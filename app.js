@@ -31,7 +31,7 @@
   function newKid(name, emoji, age) {
     age = age || 'middle';
     return {
-      id: uid(), name: name || '', emoji: emoji || '🦊', age, theme: 'plain', hard: [], tools: defaultTools(age),
+      id: uid(), name: name || '', emoji: emoji || '🙂', age, theme: 'plain', hard: [], tools: defaultTools(age),
       readAloud: false, sounds: true, calmer: false, grown: age === 'teen', big: false, easy: false, pda: false, simple: false, photo: '', photoAt: 0,
       link: null, gone: [],
       calm: clone(C.CALM_IDEAS), plan: [], planOn: false, cards: [],
@@ -245,8 +245,7 @@
         '<p class="muted" style="margin-top:10px">Start on the parent\'s phone. A child\'s device gets everything from there.</p>');
     if (w.step === 1) return card(head + '<h2>Who is it for?</h2>' +
       '<label class="lab" for="wName">First name or nickname</label><input type="text" id="wName" maxlength="24" data-f="w.name" value="' + esc(k.name) + '" placeholder="e.g. Sam">' +
-      '<label class="lab">Pick a picture</label><div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(56px,1fr))">' + C.EMOJIS.map(e => '<button class="pick' + (k.emoji === e ? ' on' : '') + '" data-a="wEmoji" data-v="' + e + '" aria-label="' + e + '"><b>' + e + '</b></button>').join('') + '</div>' +
-      '<div class="row" style="margin-top:10px">' + (k.photo ? '<span class="no-grow">' + face(k, 48) + '</span><button class="light small no-grow" data-a="noPhoto" data-v="w">Remove photo</button>' : '<button class="light small no-grow" data-a="photo" data-v="w">📷 Or use a photo or drawing</button>') + '</div>' +
+      '<p class="muted">Their picture is their own choice: they pick it themselves, under <b>My picture</b>.</p>' +
       '<label class="lab">Age group</label><p class="muted">This sets the look, the words, and which tools show first.</p><div class="grid" style="grid-template-columns:repeat(3,1fr)">' +
       Object.entries(C.AGES).map(([id, a]) => '<button class="pick' + (k.age === id ? ' on' : '') + '" data-a="wAge" data-v="' + id + '"><b>' + ({ little: '🧸', middle: '🎒', teen: '🎧' })[id] + '</b>' + a.label + '<small>' + a.sub + '</small></button>').join('') + '</div>' +
       '<p id="wErr" class="muted" role="status"></p>' + nav('wNext'));
@@ -285,7 +284,10 @@
       '<button class="tile" data-a="nav" data-v="passport"><b>🪪</b>All about me' + (k.age !== 'little' ? '<small>What helps me, to share</small>' : '') + '</button></div>';
     if (!tools.length) h += '<p class="muted">All the tools are switched off. ' + (isChild() ? 'Your parent can switch them on from their phone.' : 'A parent can switch them on in Settings.') + '</p>';
     if (isParent()) h = '<p class="note">👀 This is what ' + esc(k.name) + ' sees' + (k.link ? ' on their own device' : '') + '. You can use it together, give stars and write stories here.</p>' + h;
-    if (isChild()) h += '<div class="link-note"><button class="ghost" data-a="myPic">' + face(k, 22) + ' My picture</button><button class="ghost" data-a="linkInfo">🔗 ' + (!D.link ? 'Link to a parent\'s phone' : D.link.lost ? 'Not linked right now' : 'Linked with your parent') + '</button></div>';
+    // My picture: the child chooses it (on a parent's phone only while the child has no device of their own)
+    const pic = isParent() && k.link ? '' : '<button class="ghost" data-a="myPic">' + face(k, 22) + ' My picture</button>';
+    if (isChild()) h += '<div class="link-note">' + pic + '<button class="ghost" data-a="linkInfo">🔗 ' + (!D.link ? 'Link to a parent\'s phone' : D.link.lost ? 'Not linked right now' : 'Linked with your parent') + '</button></div>';
+    else if (pic) h += '<div class="link-note">' + pic + '</div>';
     return h + '<div style="margin-top:16px">' + disclaimer + '</div>' + logo;
   };
 
@@ -655,7 +657,7 @@
      their picture if they change them). The diary, notes and drawings are never in either box.
      ===================================================================== */
   const OS = window.OC_SYNC;
-  const SY = { stops: [], timer: null, sent: {}, gotC: false, err: '', pairing: null };
+  const SY = { stops: [], timer: null, sent: {}, gotC: false, err: '', pairing: null, my: '' };
   const KID_SHARED = ['name', 'age', 'theme', 'hard', 'tools', 'readAloud', 'sounds', 'calmer', 'grown', 'big', 'easy', 'pda', 'simple', 'calm', 'plan', 'planOn', 'reward', 'stories', 'custom'];
   const fresh = x => x.u || x.t || 0;
   // Joins two lists, keeping the newer copy of anything in both
@@ -746,54 +748,85 @@
   window.addEventListener('online', () => { SY.sent = isChild() ? { c: SY.sent.c } : {}; syncPush(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) syncPush(); });
 
-  /* ---------- Parent: show the code for a child's device ---------- */
+  /* ---------- Linking. The child's device shows a code and waits; the parent scans it or types it in.
+     The parent then leaves the family key on the server for 15 minutes, scrambled with that code,
+     and the child's device picks it up. The child doesn't have to do anything. ---------- */
   const baseUrl = () => location.origin + location.pathname.replace(/[^/]*$/, '');
-  async function pairStart(again) {
+  const codeRe = /#pair=([A-Z0-9]{8})\b/;
+
+  /* Parent's phone: scan or type the code shown on the child's device */
+  function pairStart() {
     const k = K();
-    if (again && SY.pairing && SY.pairing.kid === k.id) return pairSheet(k);
-    sheet('<h2>🔗 Getting the code ready…</h2><p class="muted">This needs the internet.</p>');
+    sheet('<h2>🔗 Link ' + esc(k.name) + '\'s device</h2><p>On ' + esc(k.name) + '\'s phone or tablet, open Our Compass and choose <b>My child\'s</b>. A code shows up there.</p>' +
+      '<div class="row" style="margin-top:10px"><button data-a="scan">📷 Scan their code</button></div>' +
+      '<label class="lab" for="pairIn">Or type the 8 letters</label><form id="pairForm" class="row" autocomplete="off"><input id="pairIn" class="code-in" type="text" maxlength="9" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="ABCD EFGH"><button class="no-grow" type="submit">Link</button></form>' +
+      '<p id="pairMsg" class="muted" role="status"></p><button class="light" data-a="pairClose" style="width:100%">Close</button>');
+  }
+  const pairMsg = t => { const m = $('pairMsg'); if (m) m.textContent = t; else toast(t); };
+  async function pairWith(raw, kidId) {
+    const code = OS.cleanCode(raw), k = D.kids.find(x => x.id === kidId) || K();
+    if (code.length !== 8) return pairMsg('The code is 8 letters. Have another look at ' + k.name + '\'s device.');
+    if ($('pairMsg') === null) pairStart();
+    pairMsg('Linking…');
     try {
       if (!k.link) { k.link = { key: OS.newKey(), at: Date.now(), seen: 0 }; save(); }
       await OS.write(k.link.key, 'p', parentBox(k)); SY.sent[k.id + 'p'] = JSON.stringify(parentBox(k));
-      const code = OS.newCode();
       await OS.offer(code, { key: k.link.key, kid: k.id });
-      if (!window.qrcode) await loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js');
-      SY.pairing = { kid: k.id, code, url: baseUrl() + '#link=' + k.link.key + '.' + k.id + '.' + code };
-      syncStart(); used('link-started'); pairSheet(k);
-    } catch (e) {
-      if (LOCALHOST) console.warn(e);
-      sheet('<h2>Couldn\'t get a code just now</h2><p>Linking needs the internet on this phone. Please try again in a moment.</p><button data-a="closeLayer">OK</button>');
-    }
-  }
-  function pairSheet(k) {
-    const p = SY.pairing, qr = window.qrcode(0, 'M'); qr.addData(p.url); qr.make();
-    sheet('<h2>🔗 Link ' + esc(k.name) + '\'s device</h2><p>On ' + esc(k.name) + '\'s phone or tablet, open Our Compass and choose <b>My child\'s</b>. Then scan this code, or type the letters.</p>' +
-      '<div style="background:#fff;padding:12px;border-radius:12px;max-width:300px;margin:0 auto">' + qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true }) + '</div>' +
-      '<div class="code" aria-label="Code ' + p.code.split('').join(' ') + '">' + p.code.slice(0, 4) + ' ' + p.code.slice(4) + '</div>' +
-      '<p class="muted" style="text-align:center">The letters work for 15 minutes. Only show this code to your child\'s device: it\'s the key to what you share.</p>' +
-      '<p id="pairMsg" class="ok" role="status" style="text-align:center">Waiting for ' + esc(k.name) + '\'s device…</p><button class="light" data-a="pairClose" style="width:100%">Close</button>');
+      SY.pairing = { kid: k.id, code };
+      syncStart(); used('link-started');
+      pairMsg('Sent. Waiting for ' + k.name + '\'s device…');
+    } catch (e) { if (LOCALHOST) console.warn(e); pairMsg('Couldn\'t link just now. Linking needs the internet on this phone. Please try again.'); }
   }
   function pairDone(k) {
     const code = SY.pairing.code; SY.pairing = null; OS.cancelOffer(code); used('link-done');
     const m = $('pairMsg');
-    if (m) { m.textContent = '✅ Linked! ' + k.name + '\'s device is ready.'; const b = m.nextElementSibling; if (b) b.textContent = 'Done'; }
+    if (m) { m.className = 'ok'; m.textContent = '✅ Linked! ' + k.name + '\'s device is ready.'; const b = m.nextElementSibling; if (b) b.textContent = 'Done'; }
     else toast('✅ ' + k.name + '\'s device is linked.');
   }
 
-  /* ---------- Child's device: scan or type the code ---------- */
+  /* Child's device: show a code, and wait for the parent */
   VIEWS.linkMe = function (k, inSetup) {
+    if (!SY.my) SY.my = OS.newCode();
+    setTimeout(waitForParent, 0);
     return card('<h2>🔗 Link to a parent\'s phone</h2>' +
-      '<p>On the parent\'s phone, open Our Compass, go to <b>📱 Devices</b> and tap <b>Link a device</b>. A code shows up there.</p>' +
-      '<div class="row" style="margin-top:10px"><button data-a="scan">📷 Scan the code</button></div>' +
-      '<label class="lab" for="codeIn">Or type the 8 letters</label><form id="codeForm" class="row" autocomplete="off"><input id="codeIn" class="code-in" type="text" maxlength="9" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="ABCD EFGH"><button class="no-grow" type="submit">Link</button></form>' +
-      '<p id="linkMsg" class="muted" role="status"></p>' +
-      '<p class="muted">After linking, this device shows only the child\'s tools. Notes and drawings made here stay here.</p>' +
+      '<p>Show this to your parent. On their phone, they open Our Compass, go to <b>📱 Devices</b>, tap <b>Link a device</b> and scan it.</p>' +
+      '<div id="myQR" style="background:#fff;padding:12px;border-radius:12px;max-width:260px;margin:10px auto;min-height:60px"></div>' +
+      '<p class="muted" style="text-align:center">Or they can type these letters:</p>' +
+      '<div class="code" aria-label="Code ' + SY.my.split('').join(' ') + '">' + SY.my.slice(0, 4) + ' ' + SY.my.slice(4) + '</div>' +
+      '<p id="linkMsg" class="ok" role="status" style="text-align:center">Waiting for your parent…</p>' +
+      '<p class="muted">After linking, this device shows only your tools. Notes and drawings made here stay here.</p>' +
       '<div class="row" style="margin-top:12px"><button class="light no-grow" data-a="' + (inSetup ? 'wBack' : 'nav') + '" data-v="home">Back</button></div>');
   };
+  let waiting = false;
+  async function waitForParent() {
+    const box = $('myQR');
+    if (box && !box.innerHTML) {
+      try {
+        if (!window.qrcode) await loadScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js');
+        const qr = window.qrcode(0, 'M'); qr.addData(baseUrl() + '#pair=' + SY.my); qr.make();
+        if ($('myQR')) $('myQR').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+      } catch (e) { if ($('myQR')) $('myQR').outerHTML = ''; }
+    }
+    if (waiting) return; waiting = true;
+    const onScreen = () => V === 'linkMe' || (V === 'setup' && W && W.step === 'link');
+    while (onScreen()) {
+      if (!document.hidden) {
+        try {
+          const info = await OS.claim(SY.my);
+          if (info) { waiting = false; const code = SY.my; SY.my = ''; return linkWith(info.key, info.kid, code); }
+        } catch (e) { if (LOCALHOST) console.warn(e); }
+      }
+      await new Promise(r => setTimeout(r, 2500));
+    }
+    waiting = false;
+  }
+
+  /* Camera scanner (on the parent's phone) */
   let scanS = null;
   function scanStop() { if (scanS) { scanS.getTracks().forEach(t => t.stop()); scanS = null; } }
   async function scan() {
-    sheet('<h2>📷 Scan the code</h2><video id="scanV" class="scan" playsinline muted autoplay></video><p id="scanMsg" class="muted" role="status" style="text-align:center">Point the camera at the code on the parent\'s phone.</p><button class="light" data-a="closeLayer" style="width:100%">Cancel</button>');
+    const kidId = K().id;
+    sheet('<h2>📷 Scan the code</h2><video id="scanV" class="scan" playsinline muted autoplay></video><p id="scanMsg" class="muted" role="status" style="text-align:center">Point the camera at the code on your child\'s device.</p><button class="light" data-a="pairStart" style="width:100%">Back</button>');
     const msg = t => { const m = $('scanMsg'); if (m) m.textContent = t; };
     try { scanS = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); }
     catch (e) { msg('The camera didn\'t open. You can type the letters instead.'); return; }
@@ -810,26 +843,16 @@
         if (det) { const r = await det.detect(v); text = r[0] ? r[0].rawValue : ''; }
         else if (v.videoWidth) { const s = Math.min(1, 640 / v.videoWidth); cv.width = v.videoWidth * s; cv.height = v.videoHeight * s; g.drawImage(v, 0, 0, cv.width, cv.height); const r = window.jsQR(g.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height); text = r ? r.data : ''; }
       } catch (e) {}
-      const m = /#link=([A-Za-z0-9_-]{40,})\.([a-z0-9]+)(?:\.([A-Z0-9]+))?/.exec(text);
-      if (m) { scanStop(); closeLayer(); linkWith(m[1], m[2], m[3] || ''); return; }
-      if (text) msg('That isn\'t an Our Compass code. Try the one on the parent\'s phone.');
+      const m = codeRe.exec(text);
+      if (m) { scanStop(); pairStart(); pairWith(m[1], kidId); return; }
+      if (text) msg('That isn\'t an Our Compass code. Try the one on your child\'s device.');
       setTimeout(tick, 250);
     };
     tick();
   }
+
   const linkMsg = t => { const m = $('linkMsg'); if (m) m.textContent = t; else toast(t); };
-  async function linkCode(raw) {
-    const code = OS.cleanCode(raw);
-    if (code.length !== 8) return linkMsg('The code is 8 letters. Have another look at the parent\'s phone.');
-    linkMsg('Linking…');
-    try {
-      const info = await OS.claim(code);
-      if (!info) return linkMsg('That code didn\'t work. Codes last 15 minutes, so the parent can make a new one.');
-      linkWith(info.key, info.kid, code);
-    } catch (e) { if (LOCALHOST) console.warn(e); linkMsg('Couldn\'t link just now. Linking needs the internet. Please try again.'); }
-  }
   async function linkWith(key, kidId, hi) {
-    if (isParent()) { toast('This is a parent\'s phone. Scan the code on your child\'s device instead.'); return; }
     linkMsg('Linking…');
     let b = null;
     try { b = await OS.read(key, 'p'); } catch (e) { if (LOCALHOST) console.warn(e); }
@@ -847,11 +870,16 @@
     used('linked-child-device'); V = 'home'; render(); window.scrollTo(0, 0);
     toast('🔗 Linked with your parent\'s phone.');
   }
-  // A code scanned with the phone's own camera opens the website with the key after "#" (never sent to a server)
+  // The child's code scanned with the parent's own camera app opens the website with the code after "#"
   function linkFromAddress() {
-    const m = /#link=([A-Za-z0-9_-]{40,})\.([a-z0-9]+)(?:\.([A-Z0-9]+))?/.exec(location.hash); if (!m) return;
+    const m = codeRe.exec(location.hash); if (!m) return;
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
-    setTimeout(() => linkWith(m[1], m[2], m[3] || ''), 300);
+    if (!isParent()) return;
+    setTimeout(() => {
+      if (D.kids.length === 1) { pairStart(); pairWith(m[1], D.kids[0].id); return; }
+      ST.pairCode = m[1];
+      sheet('<h2>🔗 Link a device</h2><p>Which child is it for?</p>' + D.kids.map(x => '<button class="opt" data-a="pairFor" data-v="' + x.id + '">' + face(x, 28) + ' ' + esc(x.name) + '</button>').join('') + '<button class="light" data-a="closeLayer" style="width:100%">Cancel</button>');
+    }, 300);
   }
 
   /* ---------- Parents' lock screen ---------- */
@@ -882,13 +910,13 @@
 
   /* Devices: linking a child's own phone or tablet */
   function gDevices(k) {
-    const L = k.link, P = SY.pairing && SY.pairing.kid === k.id;
+    const L = k.link;
     let h = card('<h2>📱 ' + esc(k.name) + '\'s own phone or tablet</h2>' +
       (L ? '<p class="ok">✅ Linked' + (L.seen ? '. Last heard from ' + esc(day(L.seen) + ', ' + time(L.seen)) : '. Waiting to hear from their device') + '.</p>'
         : '<p>Link ' + esc(k.name) + '\'s device to show only their tools there. What they share comes to you in the <b>🧒 From ' + esc(k.name) + '</b> tab, and what you change here goes to them.</p>') +
       (SY.err ? '<p class="note">⚠️ ' + esc(SY.err) + '</p>' : '') +
       '<div class="row" style="margin-top:10px"><button data-a="pairStart">' + (L ? '+ Link another device (e.g. their tablet)' : '🔗 Link a device') + '</button>' + (L ? '<button class="light no-grow" data-a="unlink">Unlink</button>' : '') + '</div>' +
-      (P ? '<p class="muted">The linking code is still open. <button class="small light" data-a="pairStart" data-v="again">Show it again</button></p>' : ''));
+      '');
     h += card('<h2>What\'s shared</h2><ul>' +
       '<li><b>To ' + esc(k.name) + '\'s device:</b> their tools, theme and look, star chart, Coming up stories, your own moments and hidden rules, All about me, calm ideas, the too-much plan if you make one, timers you start for them (if their Timer tool is on), and good moments you choose to show in "My wins".</li>' +
       '<li><b>From ' + esc(k.name) + '\'s device</b> (see the 🧒 From ' + esc(k.name) + ' tab): check-ins, social battery, and wins they add. If they change All about me or their picture, that comes back too.</li>' +
@@ -1084,10 +1112,8 @@
       (x.id === k.id ? '<span class="tag no-grow">Showing now</span>' : '<button class="small light" data-a="switchKid" data-v="' + x.id + '">Switch</button>') + '</li>').join('') + '</ul>' +
       '<div class="row" style="margin-top:8px"><button class="light" data-a="addKid">+ Add a child</button></div>');
     h += card('<h2>' + esc(k.name) + '</h2><label class="lab">Name</label><input type="text" maxlength="24" data-f="k.name" value="' + esc(k.name) + '">' +
-      // A linked child chooses their own picture on their own device
-      (k.link ? '<label class="lab">Picture</label><p><span style="font-size:28px">' + face(k, 40) + '</span> ' + esc(k.name) + ' chooses their own picture on their device.</p>' :
-      '<label class="lab">Picture</label><div class="chips">' + C.EMOJIS.map(e => '<button class="chip' + (k.emoji === e ? ' on' : '') + '" data-a="kEmoji" data-v="' + e + '">' + e + '</button>').join('') + '</div>' +
-      '<div class="row" style="margin-top:10px">' + (k.photo ? '<span class="no-grow">' + face(k, 48) + '</span><button class="light small no-grow" data-a="noPhoto" data-v="k">Remove photo</button>' : '<button class="light small no-grow" data-a="photo" data-v="k">📷 Use a photo or drawing instead</button>') + '</div>') +
+      // The child's picture is always the child's own choice
+      '<label class="lab">Picture</label><p><span style="font-size:28px">' + face(k, 40) + '</span> ' + esc(k.name) + ' chooses their own picture' + (k.link ? ' on their device.' : ', under ' + esc(k.name) + '\'s tools → My picture.') + '</p>' +
       '<label class="lab">Age group</label><div class="chips">' + Object.entries(C.AGES).map(([id, a]) => '<button class="chip' + (k.age === id ? ' on' : '') + '" data-a="kAge" data-v="' + id + '">' + a.label + ' (' + a.sub + ')</button>').join('') + '</div>' +
       '<label class="lab">Theme</label><div class="chips">' + Object.entries(C.THEMES).map(([id, t]) => '<button class="chip' + (k.theme === id ? ' on' : '') + '" data-a="kTheme" data-v="' + id + '">' + t.emoji + ' ' + t.label + '</button>').join('') + '</div>' +
       '<label class="lab">What\'s hardest right now?</label><div class="chips">' + C.HARD.map(x => '<button class="chip' + (k.hard.includes(x[0]) ? ' on' : '') + '" data-a="kHard" data-v="' + x[0] + '">' + esc(x[1]) + '</button>').join('') + '</div>' +
@@ -1155,7 +1181,8 @@
     },
     relink: () => { closeLayer(); go('linkMe'); },
     scan: () => scan(),
-    pairStart: v => pairStart(v === 'again'),
+    pairStart: () => { scanStop(); pairStart(); },
+    pairFor: v => { const c = ST.pairCode; ST.pairCode = ''; D.cur = v; save(); render(); pairStart(); pairWith(c, v); },
     pairClose: () => { closeLayer(); if (V === 'grown') render(); },
     unlink: async () => {
       const k = K();
@@ -1290,7 +1317,7 @@
     },
     drawAsPhoto: v => { const d = K().drawings[+v]; if (!d) return; const im = new Image(); im.onload = () => { K().photo = shrink(im, 160, 160, true); K().photoAt = Date.now(); save(); closeLayer(); render(); toast('That\'s your picture now.'); }; im.src = d.img; },
     drawDel: v => { if (!confirm('Delete this drawing?')) return; K().drawings.splice(+v, 1); save(); closeLayer(); render(); },
-    photo: v => { ST.photoFor = v; $('photoIn').click(); if (isChild()) closeLayer(); },
+    photo: v => { ST.photoFor = v; $('photoIn').click(); if (layer.innerHTML) closeLayer(); },
     noPhoto: v => { const k = v === 'w' ? W.kid : K(); k.photo = ''; k.photoAt = Date.now(); if (v !== 'w') save(); render(); },
 
     /* battery, wins, notes */
@@ -1372,7 +1399,7 @@
         '<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(56px,1fr))">' + C.EMOJIS.map(e => '<button class="pick' + (!k.photo && k.emoji === e ? ' on' : '') + '" data-a="myEmoji" data-v="' + e + '" aria-label="' + e + '"><b>' + e + '</b></button>').join('') + '</div>' +
         (dr.length ? '<label class="lab">Or one of my drawings</label><div class="gallery">' + dr.map((d, i) => '<button data-a="drawAsPhoto" data-v="' + i + '"><img src="' + d.img + '" alt="Drawing from ' + esc(day(d.t)) + '"></button>').join('') + '</div>' : '') +
         '<div class="row" style="margin-top:12px"><button class="light" data-a="photo" data-v="k">📷 Use a photo</button>' + (k.photo ? '<button class="light" data-a="myEmoji" data-v="' + esc(k.emoji) + '">Go back to ' + esc(k.emoji) + '</button>' : '') + '</div>' +
-        '<div class="row" style="margin-top:8px"><button class="ghost" data-a="linkInfo">🔗 Linking</button><button data-a="closeLayer">Close</button></div>');
+        '<div class="row" style="margin-top:8px">' + (isChild() ? '<button class="ghost" data-a="linkInfo">🔗 Linking</button>' : '') + '<button data-a="closeLayer">Close</button></div>');
     },
     myEmoji: v => { const k = K(); k.emoji = v; k.photo = ''; k.photoAt = Date.now(); save(); closeLayer(); render(); used('own-picture'); },
     kAge: v => { K().age = v; save(); render(); toast('Tip: "Use the usual tools for this age" is under Tools.'); },
@@ -1445,7 +1472,7 @@
     if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') onField(e);
   });
   document.addEventListener('submit', e => {
-    if (e.target.id === 'codeForm') { e.preventDefault(); linkCode($('codeIn').value); return; }
+    if (e.target.id === 'pairForm') { e.preventDefault(); pairWith($('pairIn').value, K().id); return; }
     if (e.target.id !== 'lockForm') return;
     e.preventDefault();
     const [a, b] = ST.sum || [0, 0], ans = parseInt($('lockIn').value, 10);
@@ -1481,5 +1508,5 @@
   syncStart();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
   // localhost-only test hook
-  if (LOCALHOST) window.__oc = { get D() { return D; }, get SY() { return SY; }, findPatterns: () => findPatterns(K()), passportLink: () => passportLink(K()), render, go, save, linkCode, linkWith, syncPush, unlock: () => { lockUntil = Date.now() + 600000; } };
+  if (LOCALHOST) window.__oc = { get D() { return D; }, get SY() { return SY; }, findPatterns: () => findPatterns(K()), passportLink: () => passportLink(K()), render, go, save, pairWith, linkWith, syncPush, unlock: () => { lockUntil = Date.now() + 600000; } };
 })();
